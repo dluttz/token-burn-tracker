@@ -1,0 +1,30 @@
+# Token Burn Tracker — files that must never be committed.
+# These are generated at runtime or hold private/secret data.
+
+# Cached scan results — contains your real chat prompts as session titles
+.cache.json
+
+# Per-install secret action token (authorizes kill / fix / add-source)
+.fixtoken
+
+# User-added custom tool sources (local paths, personal config)
+custom_sources.json
+
+# Server stdout/stderr and any logs (may contain your username / paths)
+*.out
+*.log
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# macOS Finder cruft
+.DS_Store
+
+# Developer probe / reverse-engineering scripts and their captured output
+probe*.command
+probe*.txt
+
+# Personal desktop-layout script — references a sibling widget that isn't part of
+# this repo and hardcodes one screen's widget positions. Not needed to run the app.
+apply-layout.command

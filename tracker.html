@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Token Burn — live</title>
+<style>
+  :root{
+    --bg:#fdfcf8; --ink:#1a1a17; --muted:#6b6a63; --rule:#e6e3da; --panel:#fff;
+    --claude:#d4663a; --cowork:#6e56cf; --codex:#10a37f; --accent:#1f7a34;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:30px 24px 72px}
+  h1{font-weight:600;font-size:25px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px;margin:3px 0 0;line-height:1.5}
+  .top{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
+  .btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:#fff;color:var(--ink);padding:7px 13px;border-radius:8px;cursor:pointer}
+  .btn:hover{border-color:#c4bfb0}
+  .btn.icon{padding:5px 11px;font-size:15px;line-height:1}
+
+  /* period cards */
+  .periods{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:22px 0 6px}
+  .pcard{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:13px 15px}
+  .pcard .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .pcard .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:4px;line-height:1.1}
+  .pcard.accent{background:#f3f8f4;border-color:#cfe6d4}
+  @media(max-width:760px){.periods{grid-template-columns:repeat(2,1fr)}}
+
+  .warnbar{margin:12px 0 0;background:#fbf0e6;border:1px solid #ead0b0;color:#8a4b13;border-radius:10px;padding:10px 13px;font-size:12.5px;line-height:1.5}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+  .chip{display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--rule);border-radius:20px;padding:4px 11px;background:#fff}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+  /* hover help "?" tooltips */
+  .help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--rule);color:var(--muted);font-size:10px;font-weight:700;cursor:help;position:relative;margin-left:6px;vertical-align:middle;background:#fff;flex:none;text-transform:none;letter-spacing:normal}
+  .help:hover{border-color:var(--accent);color:var(--accent)}
+  .help::after{content:attr(data-tip);position:absolute;left:50%;top:150%;transform:translateX(-50%);width:max-content;max-width:260px;background:#1f1f1c;color:#fff;font-size:12px;font-weight:400;line-height:1.5;padding:9px 11px;border-radius:8px;text-align:left;text-transform:none;letter-spacing:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.22)}
+  .help::before{content:"";position:absolute;left:50%;top:140%;transform:translateX(-50%);border:5px solid transparent;border-bottom-color:#1f1f1c;opacity:0;visibility:hidden;transition:opacity .12s;z-index:61}
+  .help:hover::after,.help:hover::before{opacity:1;visibility:visible}
+  .help.r::after{left:auto;right:-4px;transform:none}
+  .help.r::before{left:auto;right:3px;transform:none}
+
+  .panel{margin:30px 0 6px}
+  .panel h2{font-weight:600;font-size:15px;margin:0 0 3px}
+  .panel .cap{color:var(--muted);font-size:12.5px;margin:0 0 12px;line-height:1.5}
+  .panelhead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .panelhead h2{margin:0}
+  .calnav{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .rangebtns{margin-left:auto;display:inline-flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+  .rangebtns button{font:inherit;font-size:12px;font-weight:600;border:none;background:#fff;color:var(--muted);padding:5px 12px;cursor:pointer;border-left:1px solid var(--rule)}
+  .rangebtns button:first-child{border-left:none}
+  .rangebtns button:hover{background:#f3f4f2}
+  .rangebtns button.on{background:var(--accent);color:#fff}
+  #cal-title{font-size:14px;font-weight:600;min-width:140px;text-align:center}
+
+  /* calendar */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+  .cal-head{font-size:11px;font-weight:600;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em;padding-bottom:2px}
+  .cell{min-height:62px;border:1px solid var(--rule);border-radius:9px;padding:6px 8px;position:relative;background:#fafbf9;display:flex;flex-direction:column}
+  .cell .d{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600}
+  .cell .t{margin-top:auto;font-size:13px;font-weight:650;font-variant-numeric:tabular-nums}
+  .cell.dark .d{color:rgba(255,255,255,.85)}
+  .cell.dark .t{color:#fff}
+  .cell.today{outline:2px solid var(--accent);outline-offset:-1px}
+  .cell.empty{border:none;background:transparent}
+  .cell.future{opacity:.45}
+  .callegend{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-top:10px}
+  .callegend .sw{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid var(--rule)}
+
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  text{fill:var(--ink);font-family:inherit}
+  .axislabel,.ticklbl{fill:var(--muted);font-size:11px}
+  .tick line{stroke:var(--rule)}
+  .legend{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:11.5px;margin-top:8px}
+
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+  td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+  td.rank{color:var(--muted);width:24px}
+  .projrow{display:grid;grid-template-columns:230px 1fr 86px;gap:10px;align-items:center;margin:7px 0}
+  .projname{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar{height:16px;border-radius:3px;display:flex;overflow:hidden;background:#f0eee6}
+  .bar span{height:100%}
+  .projtok{font-variant-numeric:tabular-nums;font-weight:600;font-size:12.5px;text-align:right}
+  .empty2,.loading{color:var(--muted);font-size:14px;padding:40px 0;text-align:center;border:1px dashed var(--rule);border-radius:10px}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid #cfd4dc;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:36px;border-top:1px solid var(--rule);padding-top:12px;line-height:1.6}
+  .hidden{display:none}
+
+  /* running now — single merged list */
+  .liverow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--rule);font-size:13.5px}
+  .liverow:last-child{border-bottom:none}
+  .liverow .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .liverow .meta{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums;padding-left:10px}
+  .livekind{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#8a8a80;border:1px solid var(--rule);border-radius:5px;padding:1px 5px;flex:none}
+  .burnchip{flex:none;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;color:#b9521f;background:#fff1e8;border:1px solid #f0d3bf;border-radius:20px;padding:2px 9px}
+
+  /* agent activity / sub-agents */
+  .arun{border:1px solid var(--rule);border-radius:12px;padding:13px 15px;margin:11px 0;background:var(--panel)}
+  .arun .ahead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .arun .atitle{font-weight:650;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+  a.alink{color:var(--ink);text-decoration:none}
+  a.alink:hover{color:var(--accent);text-decoration:underline}
+  .astatus{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:5px;padding:1px 7px}
+  .astatus.active{color:#1f7a34;background:#e7f5ea;border:1px solid #cfe6d4}
+  .astatus.done{color:#5a5a52;background:#f0eee6;border:1px solid var(--rule)}
+  .astatus.idle{color:#9a6a1e;background:#fbf6ee;border:1px solid #ead9c0}
+  .ameta{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
+  .achips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
+  .achip{font-size:11.5px;border:1px solid var(--rule);border-radius:20px;padding:2px 9px;background:#fafbf9;font-variant-numeric:tabular-nums}
+  .achip b{font-weight:650}
+  .asub{margin-top:10px;border-top:1px dashed var(--rule);padding-top:9px}
+  .asub .salabel{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  .asub .sa{display:flex;gap:7px;font-size:12.5px;margin-top:5px;line-height:1.45}
+  .asub .sa .saty{flex:none;color:var(--cowork);font-weight:700}
+  .afeed{margin-top:10px;font-size:12px;color:#6b6a63;line-height:1.7}
+  .anote{color:var(--muted);font-size:13px;padding:10px 0}
+  .livenote{color:var(--muted);font-size:13px;padding:10px 0}
+  .idlerow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;margin-top:12px;padding-top:11px;border-top:1px dashed var(--rule)}
+  .leftoverbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:11px;padding:11px 13px;background:#f3f8f4;border:1px solid #cfe6d4;border-radius:10px}
+  .leftoverbar .lotext{font-size:12.5px;color:#2c5a36;flex:1;min-width:240px;line-height:1.45}
+  .pulse{width:8px;height:8px;border-radius:50%;background:#1f7a34;animation:pulse 1.9s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,122,52,.45)}70%{box-shadow:0 0 0 7px rgba(31,122,52,0)}100%{box-shadow:0 0 0 0 rgba(31,122,52,0)}}
+  /* live system + burn strip */
+  .livestrip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 16px}
+  @media(max-width:760px){.livestrip{grid-template-columns:repeat(2,1fr)}}
+  .lstat{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:9px 12px}
+  .lstat .lk{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .lstat .lv{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.15}
+  .lstat .lsub{font-size:11px;color:var(--muted);margin-top:1px}
+  .lstat.fire{background:#fff6f0;border-color:#f0d3bf}
+  .lstat.fire .lv{color:#b9521f}
+
+  /* today highlight in calendar */
+  .cell.today{outline:3px solid #e08a2b;outline-offset:-1px;box-shadow:0 0 0 4px rgba(224,138,43,.18)}
+  .cell.today .d{color:#e08a2b;font-weight:800}
+  .cell.today.dark .d{color:#ffd9a8}
+  .todaytag{position:absolute;top:5px;right:6px;font-size:8.5px;font-weight:800;letter-spacing:.05em;color:#fff;background:#e08a2b;border-radius:4px;padding:1px 4px}
+
+  /* efficiency */
+  .sugs{display:flex;flex-direction:column;gap:9px}
+  .sug{display:flex;gap:11px;background:#f3f8f4;border:1px solid #cfe6d4;border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.5}
+  .sug .rank{flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .sug .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);margin-bottom:2px}
+  .revealbtn{margin-top:9px;font:inherit;font-size:12px;font-weight:600;border:1px solid #cfe6d4;background:#fff;color:var(--accent);padding:5px 11px;border-radius:7px;cursor:pointer}
+  .revealbtn:hover{background:#eef6ef}
+  .revealbtn.open{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .revealbox{margin-top:9px;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:11px 13px;font-size:12.5px;line-height:1.55;color:#4a4a44}
+  .revealbox div{margin:5px 0}
+  .revealbox div:first-child{margin-top:0}
+  .promptguide{margin-top:16px;border:1px solid var(--rule);border-radius:11px;overflow:hidden}
+  .promptguide table{font-size:12.5px}
+  .promptguide td,.promptguide th{padding:9px 12px}
+  .promptguide tr:last-child td{border-bottom:none}
+
+  /* waste */
+  .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:11px;padding:13px 15px;margin:10px 0}
+  .wrow .wl{font-weight:650;font-size:13.5px}
+  .wrow .wm{color:#9a6a1e;font-size:12px;font-weight:600;margin:3px 0 0;font-variant-numeric:tabular-nums}
+  .wrow .wd{color:var(--muted);font-size:12.5px;margin:5px 0 0;line-height:1.5}
+  .wrow .wh{font-size:12.5px;margin:8px 0 0;line-height:1.5}
+  .wexp{margin:10px 0 2px}
+  .wexp .row{display:grid;grid-template-columns:118px 1fr;gap:12px;font-size:12.5px;line-height:1.55;margin-top:7px;align-items:start}
+  .wexp .lab{font-weight:700;color:#9a6a1e;white-space:nowrap}
+  .wexp .val{color:#4a4a44}
+  @media(max-width:640px){.wexp .row{grid-template-columns:1fr;gap:1px}}
+  .fixbar{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
+  .fixbtn{font:inherit;font-size:12.5px;font-weight:600;border:none;background:#b9521f;color:#fff;padding:7px 14px;border-radius:8px;cursor:pointer}
+  .fixbtn:hover{background:#a2461a}
+  .fixbtn:disabled{opacity:.6;cursor:default}
+  .fixstatus{font-size:12.5px}
+  .fixstatus.ok{color:#2c7a3f}
+  .fixstatus.err{color:#c0392b}
+  .wnote{color:#2c7a3f;background:#f3f8f4;border:1px solid #cfe6d4;border-radius:10px;padding:12px 14px;font-size:13px}
+
+  /* tracked tools / add a tool */
+  .srow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--rule);font-size:13px}
+  .srow:last-of-type{border-bottom:none}
+  .srow .snm{font-weight:600}
+  .srow .smeta{color:var(--muted);font-size:12px;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+  .srow .srm{margin-left:12px;font:inherit;font-size:12px;border:1px solid var(--rule);background:#fff;border-radius:7px;padding:4px 10px;cursor:pointer;color:#b9521f;flex:none}
+  .srow .srm:hover{border-color:#e0b9a0}
+  .addtool{margin-top:14px;border:1px solid var(--rule);border-radius:11px;padding:14px;background:#fafbf9}
+  .addrow{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center;margin:8px 0}
+  .addrow label{font-size:12.5px;color:var(--muted);font-weight:600}
+  .addrow input{font:inherit;font-size:13px;border:1px solid var(--rule);border-radius:8px;padding:7px 10px;width:100%;background:#fff}
+  .addbar{display:flex;align-items:center;gap:10px;margin-top:10px}
+  @media(max-width:640px){.addrow{grid-template-columns:1fr;gap:3px}}
+
+  /* ============================================================
+     REFINED REDESIGN LAYER — soft, elevated, premium (overrides above).
+     Keeps every class/ID; only the look changes.
+     ============================================================ */
+  :root{
+    --bg:#f4f3ee; --ink:#1c1b18; --muted:#8c897e; --rule:#ece9e0; --panel:#ffffff; --accent:#1f7a34;
+    --shadow:0 1px 2px rgba(28,27,24,.04), 0 12px 32px rgba(28,27,24,.07);
+    --shadow-sm:0 1px 2px rgba(28,27,24,.05), 0 4px 14px rgba(28,27,24,.05);
+    --radius:18px;
+  }
+  html{scroll-behavior:smooth; color-scheme:light}
+  /* Opaque themed base behind the gradient. Without this, the `background` shorthand
+     leaves the root color transparent, and on a Mac in Dark appearance the browser's
+     black canvas shows through during momentum-scroll / rubber-band (the "black bar"
+     that popped up at the bottom). overscroll-behavior:none also kills the elastic reveal. */
+  html,body{background-color:var(--bg);
+    background-image:
+      radial-gradient(1100px 560px at 82% -12%, #faf6ef 0%, rgba(250,246,239,0) 60%),
+      linear-gradient(180deg,#f6f5f0,#f0eee6);
+    background-attachment:fixed; overscroll-behavior:none;
+    color:var(--ink); letter-spacing:-.005em}
+
+  /* sidebar */
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:230px;padding:20px 14px;z-index:40;overflow-y:auto;
+    background:rgba(255,255,255,.62);backdrop-filter:saturate(150%) blur(16px);-webkit-backdrop-filter:saturate(150%) blur(16px);
+    border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:2px}
+  .sidebar .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15.5px;letter-spacing:-.02em;margin:2px 6px 20px}
+  .sidebar .brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#1f7a34,#36b85a);
+    display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 3px 10px rgba(31,122,52,.32)}
+  .sidebar .nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;color:#615e55;
+    font-size:13.5px;font-weight:550;cursor:pointer;text-decoration:none;transition:background .13s,color .13s,transform .13s}
+  .sidebar .nav svg{width:17px;height:17px;flex:none;opacity:.78}
+  .sidebar .nav:hover{background:rgba(31,122,52,.09);color:var(--ink)}
+  .sidebar .nav:active{transform:scale(.98)}
+  .sidebar .nav.on{background:var(--ink);color:#fff}
+  .sidebar .nav.on svg{opacity:1}
+  .navfoot{margin-top:auto;display:flex;align-items:center;gap:7px;padding:14px 10px 2px;color:var(--muted);font-size:11px;line-height:1.5}
+  .navfoot .pulse{width:7px;height:7px}
+
+  /* main column offset for the sidebar */
+  .wrap{max-width:1120px;margin:0 auto 0 230px;padding:0 36px 90px 32px}
+  @media(max-width:880px){ .sidebar{display:none} .wrap{margin:0 auto;padding:18px 18px 80px} }
+
+  /* sticky frosted header */
+  .top{position:sticky;top:0;z-index:30;align-items:center;margin:0 0 6px;padding:20px 2px 16px;
+    background:linear-gradient(180deg,rgba(244,243,238,.96),rgba(244,243,238,.72));
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--rule)}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.025em}
+  .sub{font-size:12.5px}
+
+  /* each section becomes an elevated card */
+  .panel{background:var(--panel);border:1px solid var(--rule);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:20px 22px;margin:18px 0;scroll-margin-top:88px}
+  .panel h2{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
+
+  /* stat cards */
+  .periods{gap:14px;margin:20px 0 6px}
+  .pcard{border:1px solid var(--rule);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px 17px;background:#fff;
+    transition:transform .15s,box-shadow .15s}
+  .pcard:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+  .pcard .v{font-size:24px;font-weight:700;letter-spacing:-.02em}
+  .pcard.accent{background:linear-gradient(180deg,#f1f8f3,#edf5ef);border-color:#d3e8d8}
+
+  /* chips, buttons, toggles */
+  .chip{background:#fff;border-color:var(--rule);box-shadow:var(--shadow-sm);border-radius:999px;padding:5px 12px}
+  .btn{border-radius:10px;background:#fff;box-shadow:var(--shadow-sm);font-weight:550;transition:transform .12s,border-color .12s}
+  .btn:hover{transform:translateY(-1px);border-color:var(--rule)}
+  .rangebtns{border-radius:10px;box-shadow:var(--shadow-sm);overflow:hidden}
+  .rangebtns button.on{background:var(--ink);color:#fff}
+  .fixbtn{border-radius:10px;box-shadow:0 4px 14px rgba(185,82,31,.25)}
+  .lstat{border-radius:14px;box-shadow:var(--shadow-sm)}
+  .lstat.fire{background:linear-gradient(180deg,#fff6f0,#fdf0e7)}
+
+  /* flatten cards-inside-cards so it doesn't look heavy */
+  .arun,.wrow,.sug,.promptguide,.revealbox,.addtool{box-shadow:none}
+
+  /* prettier scrollbars */
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#dedbd0;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#cbc7ba;background-clip:content-box}
+
+  /* theme switcher control (in sidebar) */
+  .themeswitch{display:flex;gap:4px;margin:10px 6px 2px;background:rgba(0,0,0,.045);border-radius:11px;padding:3px}
+  .themeswitch button{flex:1;font:inherit;font-size:11.5px;font-weight:600;border:none;background:transparent;color:var(--muted);padding:6px 4px;border-radius:8px;cursor:pointer;transition:.12s}
+  .themeswitch button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow-sm)}
+
+  /* ===================== DARK THEME ===================== */
+  html[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#131311; --ink:#edece9; --muted:#9b988e; --rule:#2c2a26; --panel:#1c1b18; --accent:#41cf6c;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.5);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.45), 0 5px 16px rgba(0,0,0,.4);
+  }
+  html[data-theme="dark"] body{background:
+      radial-gradient(1100px 560px at 82% -12%, #1c1b16 0%, rgba(0,0,0,0) 60%),
+      linear-gradient(180deg,#131210,#0e0e0c) fixed;}
+  html[data-theme="dark"] .sidebar{background:rgba(17,16,13,.7);border-right-color:var(--rule)}
+  html[data-theme="dark"] .sidebar .nav{color:#b8b4a9}
+  html[data-theme="dark"] .sidebar .nav:hover{background:rgba(65,207,108,.13);color:#fff}
+  html[data-theme="dark"] .sidebar .nav.on{background:#2f2d28;color:#fff}
+  html[data-theme="dark"] .top{background:linear-gradient(180deg,rgba(19,19,17,.96),rgba(19,19,17,.72));border-bottom-color:var(--rule)}
+  html[data-theme="dark"] .pcard,html[data-theme="dark"] .lstat{background:var(--panel)}
+  html[data-theme="dark"] .pcard.accent{background:linear-gradient(180deg,#16271c,#132019);border-color:#244c34}
+  html[data-theme="dark"] .chip,html[data-theme="dark"] .btn,html[data-theme="dark"] .rangebtns button,html[data-theme="dark"] .help{background:#232220;color:var(--ink)}
+  html[data-theme="dark"] .rangebtns button.on{background:var(--accent);color:#0b1f14}
+  html[data-theme="dark"] .lstat.fire{background:linear-gradient(180deg,#2a1b12,#23160f)}
+  html[data-theme="dark"] .burnchip{background:#2a1b12;border-color:#5a3a22;color:#f0a878}
+  html[data-theme="dark"] .addtool,html[data-theme="dark"] .revealbox,html[data-theme="dark"] .promptguide{background:#1a1916;border-color:var(--rule)}
+  html[data-theme="dark"] .addrow input{background:#121210;color:var(--ink);border-color:var(--rule)}
+  html[data-theme="dark"] .sug,html[data-theme="dark"] .leftoverbar{background:#16241b;border-color:#244c34}
+  html[data-theme="dark"] .wrow{background:#241d12;border-color:#4a3a1e}
+  html[data-theme="dark"] .wrow .wm{color:#d8a55a}
+  html[data-theme="dark"] .wnote{background:#16241b;border-color:#244c34;color:#bfe6c8}
+  html[data-theme="dark"] .warnbar{background:#2a2113;border-color:#4a3a1e;color:#e6b585}
+  html[data-theme="dark"] .themeswitch{background:rgba(255,255,255,.06)}
+  html[data-theme="dark"] .themeswitch button.on{background:#2f2d28;color:#fff}
+
+  /* ===================== SOFT (neumorphic) THEME ===================== */
+  html[data-theme="soft"]{
+    --bg:#e9ebf0; --ink:#41454d; --muted:#888d9b; --rule:#e9ebf0; --panel:#e9ebf0; --accent:#5a73d6;
+    --shadow:7px 7px 16px #c6c9d3, -7px -7px 16px #fdffff;
+    --shadow-sm:4px 4px 10px #cdd0da, -4px -4px 10px #fdffff;
+    --radius:20px;
+  }
+  html[data-theme="soft"] body{background:#e9ebf0}
+  html[data-theme="soft"] .sidebar{background:#e9ebf0;border-right:none}
+  html[data-theme="soft"] .sidebar .nav{color:#5d6371}
+  html[data-theme="soft"] .sidebar .nav:hover{background:transparent;color:#41454d;box-shadow:var(--shadow-sm)}
+  html[data-theme="soft"] .sidebar .nav.on{background:#e9ebf0;color:var(--accent);box-shadow:inset 3px 3px 7px #c6c9d3, inset -3px -3px 7px #fdffff}
+  html[data-theme="soft"] .top{background:#e9ebf0;border-bottom:none}
+  html[data-theme="soft"] .panel{background:#e9ebf0;border:none;box-shadow:var(--shadow)}
+  html[data-theme="soft"] .pcard,html[data-theme="soft"] .pcard.accent,html[data-theme="soft"] .chip,html[data-theme="soft"] .btn,html[data-theme="soft"] .rangebtns,html[data-theme="soft"] .lstat,html[data-theme="soft"] .lstat.fire,html[data-theme="soft"] .help{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm)}
+  html[data-theme="soft"] .rangebtns button{background:transparent}
+  html[data-theme="soft"] .rangebtns button.on{background:#e9ebf0;color:var(--accent);box-shadow:inset 3px 3px 6px #c6c9d3,inset -3px -3px 6px #fdffff}
+  html[data-theme="soft"] .arun,html[data-theme="soft"] .wrow,html[data-theme="soft"] .sug,html[data-theme="soft"] .revealbox,html[data-theme="soft"] .promptguide,html[data-theme="soft"] .addtool,html[data-theme="soft"] .leftoverbar,html[data-theme="soft"] .warnbar,html[data-theme="soft"] .wnote{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm)}
+  html[data-theme="soft"] .addrow input{background:#e9ebf0;border:none;box-shadow:inset 3px 3px 7px #c6c9d3,inset -3px -3px 7px #fdffff}
+  html[data-theme="soft"] .burnchip{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm);color:#b9521f}
+  html[data-theme="soft"] .themeswitch{background:#e9ebf0;box-shadow:inset 3px 3px 7px #c6c9d3,inset -3px -3px 7px #fdffff}
+  html[data-theme="soft"] .themeswitch button.on{background:#e9ebf0;color:var(--accent);box-shadow:3px 3px 7px #c6c9d3,-3px -3px 7px #fdffff}
+
+  /* customize-layout control + modal */
+  .customizebtn{display:flex;align-items:center;gap:11px;width:calc(100% - 0px);margin:6px 0 0;padding:9px 11px;border-radius:11px;border:none;background:transparent;color:#615e55;font:inherit;font-size:13.5px;font-weight:550;cursor:pointer;text-align:left}
+  .customizebtn svg{width:17px;height:17px;opacity:.78;flex:none}
+  .customizebtn:hover{background:rgba(31,122,52,.09);color:var(--ink)}
+  html[data-theme="dark"] .customizebtn{color:#b8b4a9}
+  html[data-theme="dark"] .customizebtn:hover{color:#fff;background:rgba(65,207,108,.13)}
+  html[data-theme="soft"] .customizebtn:hover{background:transparent;box-shadow:var(--shadow-sm);color:#41454d}
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,19,16,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.32);width:min(450px,94vw);max-height:84vh;overflow:auto;padding:20px 22px}
+  .modal-head{display:flex;align-items:center;gap:12px}
+  .modal-head h3{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em}
+  .modal-x{margin-left:auto;border:none;background:transparent;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;padding:0 4px}
+  .modal-x:hover{color:var(--ink)}
+  .modal-sub{color:var(--muted);font-size:12.5px;margin:5px 0 14px;line-height:1.5}
+  .lrow{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--rule);border-radius:10px;margin:7px 0;background:var(--bg)}
+  .lrow .grip{cursor:grab;color:var(--muted);font-size:15px;line-height:1;flex:none;user-select:none}
+  .lrow:active .grip{cursor:grabbing}
+  .lrow.dragging{opacity:.4}
+  .lrow.dragover{border-color:var(--accent);box-shadow:inset 0 0 0 2px rgba(31,122,52,.18)}
+  .lrow .lname{flex:1;font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .liconbtn{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:8px;padding:4px 9px;cursor:pointer;flex:none}
+  .liconbtn:hover{border-color:var(--accent)}
+  .liconbtn:disabled{opacity:.32;cursor:default}
+  .liconbtn.lvis.off{color:var(--muted)}
+  .modal-foot{margin-top:15px;display:flex;justify-content:flex-end}
+
+  /* tooltip behaviour: don't flash while scrolling; require a brief hover-rest */
+  .help:hover::after,.help:hover::before{transition-delay:.32s}
+  body.is-scrolling .help::after,body.is-scrolling .help::before{opacity:0!important;visibility:hidden!important;transition:none!important}
+</style>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('tbTheme')||'light';}catch(e){}</script>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2s5 4 5 9a5 5 0 01-10 0c0-2 1-3 1.5-3.5C9 9 9.5 10.5 11 10.5c0-3 1-5 1-8.5z" fill="currentColor"/></svg></span> Token Burn</div>
+  <a class="nav on" data-go="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Overview</a>
+  <a class="nav" data-go="Running now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg>Running now</a>
+  <a class="nav" data-go="Sub-agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Agents</a>
+  <a class="nav" data-go="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>Calendar</a>
+  <a class="nav" data-go="Over time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 3 4-7"/></svg>Over time</a>
+  <a class="nav" data-go="top projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Projects</a>
+  <a class="nav" data-go="more efficient"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>Efficiency</a>
+  <a class="nav" data-go="suggested to remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg>Cleanup</a>
+  <a class="nav" data-go="Tracked tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Tools</a>
+  <div class="themeswitch" id="theme-switch">
+    <button data-theme="light">Light</button><button data-theme="dark">Dark</button><button data-theme="soft">Soft</button>
+  </div>
+  <button class="customizebtn" id="customize-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 18h6"/><path d="M14 12h6M4 12h4"/><circle cx="17" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>Customize layout</button>
+  <div class="navfoot"><span class="pulse"></span> 100% local · nothing leaves your Mac · v1.0.0</div>
+</nav>
+<div class="modal-overlay" id="layout-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-head"><h3>Customize layout</h3><button class="modal-x" id="layout-close">&times;</button></div>
+    <p class="modal-sub">Show, hide, and reorder the sections below. Saved on this computer.</p>
+    <div id="layout-list"></div>
+    <div class="modal-foot"><button class="btn" id="layout-reset">Reset to default</button></div>
+  </div>
+</div>
+<div class="wrap">
+  <div class="top">
+    <div><h1>Token Burn</h1><p class="sub">Live from your machine — Claude Code, Cowork, and Codex. <span id="genat"></span></p></div>
+    <button class="btn" id="refresh" style="margin-left:auto">↻ Rescan</button>
+    <span class="help r" data-tip="Re-reads all your logs right now to refresh every number on this page. It normally updates on its own, so you rarely need this.">?</span>
+  </div>
+
+  <div id="loading" class="loading"><span class="spin"></span><span id="lmsg">Scanning your logs…</span></div>
+
+  <div id="dash" class="hidden">
+    <div class="periods">
+      <div class="pcard accent"><div class="k">Today</div><div class="v" id="p-day">—</div></div>
+      <div class="pcard"><div class="k">This week</div><div class="v" id="p-week">—</div></div>
+      <div class="pcard"><div class="k">This month</div><div class="v" id="p-month">—</div></div>
+      <div class="pcard"><div class="k">This year</div><div class="v" id="p-year">—</div></div>
+      <div class="pcard"><div class="k">All-time</div><div class="v" id="p-all">—</div></div>
+    </div>
+    <div class="chips" id="tools"></div>
+    <div id="warnings"></div>
+
+    <div class="panel">
+      <div class="panelhead"><h2>Running now <span class="help" data-tip="A live view of which AI sessions (chats) and processes are active right now. The four cards show how fast you're spending tokens, plus CPU and memory use. Refreshes every few seconds.">?</span></h2><span class="pulse"></span>
+        <span id="live-at" style="margin-left:auto;color:var(--muted);font-size:12px"></span></div>
+      <p class="cap">What's active right now — each chat/session by its title, plus live CPU, memory and token burn. Refreshes on its own every few seconds.</p>
+      <div class="livestrip" id="live-strip"></div>
+      <div id="running"><div class="livenote">Checking…</div></div>
+      <div id="idle-note"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running, this shows what it's actually doing inside: which tools it's using and how often, code changes it made, and any helper 'sub-agents' it started. It's the detail a normal usage number can't show you.">?</span></h2>
+        <span id="agents-at" style="margin-left:auto;color:var(--muted);font-size:12px"></span></div>
+      <p class="cap">What each agent run is actually doing <i>inside</i> — the tools it's touching, code patches, reasoning steps, and any sub-agents it spawned. The unit here is the <b>run</b>, not the session — the part a normal dashboard can't see. Live.</p>
+      <div id="agents"><div class="livenote">Checking…</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panelhead">
+        <h2>Calendar <span class="help" data-tip="Tokens used each day this month. Darker green = more tokens that day. Today has an orange outline. Use the arrows to change month.">?</span></h2>
+        <div class="calnav">
+          <button class="btn icon" id="cal-prev">‹</button>
+          <span id="cal-title"></span>
+          <button class="btn icon" id="cal-next">›</button>
+          <button class="btn" id="cal-today">Today</button>
+        </div>
+      </div>
+      <p class="cap">Tokens burned each day. Darker = more; today is outlined.</p>
+      <div class="cal" id="cal"></div>
+      <div class="callegend">Less
+        <span class="sw" style="background:#fafbf9"></span>
+        <span class="sw" style="background:#d6ecd9"></span>
+        <span class="sw" style="background:#9ed8a6"></span>
+        <span class="sw" style="background:#4caf66"></span>
+        <span class="sw" style="background:#1f7a34"></span>
+        More <span id="cal-month-total" style="margin-left:14px"></span></div>
+    </div>
+
+    <div class="panel">
+      <div class="panelhead"><h2>Over time <span class="help" data-tip="Your token use plotted over time, one colored line per tool. Use the buttons on the right to zoom the time window. Lines break where there was no activity. Updates live.">?</span></h2>
+        <div class="rangebtns" id="ts-range">
+          <button data-r="1d">1D</button><button data-r="5d">5D</button><button data-r="1m" class="on">1M</button><button data-r="all">All</button>
+        </div>
+        <span class="help r" data-tip="Zoom the chart: 1D = last 24 hours (by hour), 5D = last 5 days, 1M = last 30 days (by day), All = your whole history.">?</span></div>
+      <p class="cap" id="ts-cap">Tokens over time, one line per tool. Updates live.</p>
+      <svg id="ts-svg"></svg>
+      <div class="legend" id="ts-legend"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Where your tokens go — top projects <span class="help" data-tip="Which folders/projects on your Mac your tokens went to. A longer bar = more tokens spent working in that folder. Colors show which tool.">?</span></h2>
+      <p class="cap">Which working directories / sessions burned the most, by tool.</p>
+      <div id="projects"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Why — what you worked on (top sessions) <span class="help" data-tip="The individual chats/tasks that used the most tokens, each labeled by your opening request. This answers 'what was I actually doing that cost the most?'">?</span></h2>
+      <p class="cap">The tasks/threads that burned the most, titled by your opening request or the session name.</p>
+      <div id="why"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Top 10 days <span class="help" data-tip="Your 10 heaviest days by token use, with the date, the tools involved (colored dots), and the top projects that day.">?</span></h2>
+      <p class="cap">Your heaviest days and what they went to.</p>
+      <table><thead><tr><th></th><th>Date</th><th>Tokens</th><th>Tools</th><th>Top projects</th></tr></thead><tbody id="top10"></tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>Where you can become more efficient <span class="help" data-tip="Habits you can change to use fewer tokens, based on your own heaviest chats and folders — plus a guide for which tool to use for which kind of task. These are things to do differently, not things to delete.">?</span></h2>
+      <p class="cap">How to <b>change the way you work</b> to burn fewer tokens — your heaviest chats and folders, plus a guide to which tool to reach for and how to prompt it. (Background jobs to switch off are in “suggested to remove” below.)</p>
+      <div class="sugs" id="suggestions"></div>
+      <div class="promptguide">
+        <table>
+          <thead><tr><th>When you want to…</th><th>Use</th><th>Prompt it like</th></tr></thead>
+          <tbody>
+            <tr><td>A quick fact, summary, or rename</td><td>A small/fast model (Haiku, GPT-mini)</td><td>“In one line: …” — keep it short, give no extra context.</td></tr>
+            <tr><td>Focused code edits in one repo</td><td>Codex</td><td>Point it at the exact file/function and describe the change precisely.</td></tr>
+            <tr><td>Multi-file work, refactors, research</td><td>Claude Code / Cowork</td><td>State the goal + constraints once, then let it plan and use sub-agents.</td></tr>
+            <tr><td>Deep reasoning or tricky design</td><td>Opus — sparingly</td><td>Give full context once; ask for a plan before any code.</td></tr>
+            <tr><td>A session that's getting expensive</td><td>/compact or a fresh thread</td><td>Summarize what's done, start clean — stops re-reading old context every turn.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Burning tokens with little value — suggested to remove <span class="help" data-tip="Background AI jobs and login items that run on their own and spend tokens whether or not you use the result. Each one explains what it is and has a one-click or guided way to turn it off (reversible).">?</span></h2>
+      <p class="cap"><b>Things to switch off</b> — background AI jobs and login agents that run on their own and spend tokens whether or not you use the output. Each has a one-click or guided removal (all reversible). Updates live as you remove them.</p>
+      <div id="waste"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panelhead"><h2>Tracked tools <span class="help" data-tip="Claude Code, Cowork, and Codex are tracked automatically. Other AI tools show up live by process when they run. To also COUNT another tool's tokens, add it here by pointing at its log files.">?</span></h2></div>
+      <p class="cap">Claude Code, Cowork, and Codex are detected automatically. Aider, Gemini CLI, llama.cpp, and Ollama show up live in “Running now” when their process is active. To <b>count tokens</b> for any other tool, add it below by pointing at its log files.</p>
+      <div id="sources"></div>
+      <div class="addtool">
+        <div class="addrow"><label>Tool name</label><input id="src-name" placeholder="e.g. Aider"></div>
+        <div class="addrow"><label>Log files</label><input id="src-glob" placeholder="~/.aider/**/*.jsonl   (a path or glob to its JSON logs)"></div>
+        <div class="addrow"><label>Token field(s)</label><input id="src-keys" placeholder="total_tokens   —or—   prompt_tokens,completion_tokens"></div>
+        <div class="addrow"><label>Timestamp field</label><input id="src-ts" placeholder="optional — e.g. timestamp (else file date is used)"></div>
+        <div class="addrow"><label>Process name</label><input id="src-proc" placeholder="optional — e.g. aider (shows it live in Running now)"></div>
+        <div class="addbar"><button class="fixbtn" onclick="addSource()">Add tool</button><span class="fixstatus" id="src-status"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const SVGNS = "http://www.w3.org/2000/svg";
+const BASE_COLORS = {"Claude Code":"#d4663a","Cowork":"#6e56cf","Codex":"#10a37f","Ollama":"#0ea5e9"};
+const PALETTE = ["#e08a2b","#db2777","#65a30d","#7c3aed","#0891b2","#b45309","#be123c"];
+let TOOLS = [{k:"Claude Code",c:"#d4663a"},{k:"Cowork",c:"#6e56cf"},{k:"Codex",c:"#10a37f"}];
+let COLOR = Object.fromEntries(TOOLS.map(t=>[t.k,t.c]));
+// rebuild the tool list + colors from whatever tools actually have data (incl. custom-added ones)
+function rebuildTools(d){
+  const colors = Object.assign({}, BASE_COLORS, d.toolColors||{});
+  const order = ["Claude Code","Cowork","Codex"];
+  const keys = Object.keys(d.byTool||{});
+  const list = [];
+  order.forEach(k=>{ if(d.byTool && d.byTool[k]!=null) list.push(k); });
+  keys.forEach(k=>{ if(!order.includes(k)) list.push(k); });
+  let pi=0;
+  TOOLS = list.map(k=>{ let c=colors[k]; if(!c){ c=PALETTE[pi%PALETTE.length]; pi++; } return {k,c}; });
+  if(!TOOLS.length) TOOLS=[{k:"Claude Code",c:"#d4663a"},{k:"Cowork",c:"#6e56cf"},{k:"Codex",c:"#10a37f"}];
+  COLOR = Object.fromEntries(TOOLS.map(t=>[t.k,t.c]));
+}
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function svgEl(t,a,p){const e=document.createElementNS(SVGNS,t);if(a)for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function fmt(n){n=+n||0;
+  if(n>=1e9)return (n/1e9).toFixed(2)+"B";
+  if(n>=1e6)return (n/1e6).toFixed(1).replace(/\.0$/,'')+"M";
+  if(n>=1e3)return (n/1e3).toFixed(1).replace(/\.0$/,'')+"K";
+  return String(Math.round(n));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function hlp(tip, cls){ return `<span class="help${cls?(' '+cls):''}" data-tip="${esc(tip)}">?</span>`; }
+const pad = n => String(n).padStart(2,"0");
+const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+let DAYS = {};       // "YYYY-MM-DD" -> {total, byTool}
+let calY, calM;      // calendar view month
+
+async function load(){
+  let d;
+  try{ d = await (await fetch("/api/data")).json(); }
+  catch(e){ $("#lmsg").textContent="Can't reach the tracker server."; return; }
+  if(d.error){ $("#loading").innerHTML='<span style="color:#c0392b">Error: '+esc(d.error.split("\n")[0])+'</span>'; }
+  if(d.loading){
+    $("#lmsg").textContent = `Scanning your logs… parsed ${d.parsed||0} new files of ${d.files||0}`;
+    if(d.days && d.days.length) render(d);
+    setTimeout(load, 1500); return;
+  }
+  $("#loading").classList.add("hidden");
+  render(d);
+}
+
+function render(d){
+  $("#dash").classList.remove("hidden");
+  rebuildTools(d);
+  renderSources(d);
+  $("#genat").textContent = d.generatedAt ? ("· updated "+d.generatedAt.replace("T"," ")) : "";
+  DAYS = {};
+  (d.days||[]).forEach(x => DAYS[x.date] = {total:x.total, byTool:x.byTool||{}});
+
+  // ---- period totals (calendar-based) ----
+  const now = new Date();
+  const today = isoLocal(now);
+  const wkStart = new Date(now); wkStart.setDate(now.getDate() - now.getDay()); // Sunday
+  const weekStart = isoLocal(wkStart);
+  const ym = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+  const yr = String(now.getFullYear());
+  let pDay=0,pWeek=0,pMonth=0,pYear=0;
+  for(const k in DAYS){ const v=DAYS[k].total;
+    if(k===today)pDay+=v;
+    if(k>=weekStart && k<=today)pWeek+=v;
+    if(k.startsWith(ym))pMonth+=v;
+    if(k.startsWith(yr))pYear+=v;
+  }
+  $("#p-day").textContent=fmt(pDay);
+  $("#p-week").textContent=fmt(pWeek);
+  $("#p-month").textContent=fmt(pMonth);
+  $("#p-year").textContent=fmt(pYear);
+  $("#p-all").textContent=fmt(d.grand);
+
+  $("#tools").innerHTML = TOOLS.filter(t=>d.byTool&&d.byTool[t.k]).map(t=>
+    `<span class="chip"><span class="dot" style="background:${t.c}"></span>${t.k}: <b>${fmt(d.byTool[t.k])}</b></span>`).join("");
+  $("#warnings").innerHTML = (d.warnings||[]).length
+    ? `<div class="warnbar">⚠ ${d.warnings.map(esc).join("<br>")}</div>` : "";
+
+  if(calY===undefined){ calY=now.getFullYear(); calM=now.getMonth(); }
+  renderCalendar();
+  loadSeries(TS_RANGE);
+  renderProjects(d.byProject||[]);
+  renderWhy(d.bySession||[]);
+  renderTop10(d.days||[]);
+  renderInsights(d.insights);
+  $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; nothing leaves your Mac.`;
+}
+
+// ---- calendar ----
+function calLevel(t){ if(t<1)return 0; if(t<1e6)return 1; if(t<1e7)return 2; if(t<5e7)return 3; return 4; }
+const CAL_BG = ["#fafbf9","#d6ecd9","#9ed8a6","#4caf66","#1f7a34"];
+function renderCalendar(){
+  $("#cal-title").textContent = `${MONTHS[calM]} ${calY}`;
+  const grid = $("#cal"); grid.innerHTML="";
+  WD.forEach(w=>{const h=document.createElement("div");h.className="cal-head";h.textContent=w;grid.appendChild(h);});
+  const startDow = new Date(calY,calM,1).getDay();
+  const dim = new Date(calY,calM+1,0).getDate();
+  const today = isoLocal(new Date());
+  for(let i=0;i<startDow;i++){const e=document.createElement("div");e.className="cell empty";grid.appendChild(e);}
+  let monthTotal=0;
+  for(let dd=1;dd<=dim;dd++){
+    const ds = `${calY}-${pad(calM+1)}-${pad(dd)}`;
+    const tot = (DAYS[ds]&&DAYS[ds].total)||0; monthTotal+=tot;
+    const lvl = calLevel(tot);
+    const cell = document.createElement("div");
+    const isToday = ds===today;
+    cell.className = "cell"+(lvl>=3?" dark":"")+(isToday?" today":"")+(ds>today?" future":"");
+    cell.style.background = CAL_BG[lvl];
+    cell.title = `${ds}: ${fmt(tot)} tokens`;
+    cell.innerHTML = (isToday?`<span class="todaytag">TODAY</span>`:"")+`<span class="d">${dd}</span>`+(tot>0?`<span class="t">${fmt(tot)}</span>`:"");
+    grid.appendChild(cell);
+  }
+  $("#cal-month-total").textContent = `· ${MONTHS[calM]}: ${fmt(monthTotal)} tokens`;
+}
+$("#cal-prev").addEventListener("click",()=>{ calM--; if(calM<0){calM=11;calY--;} renderCalendar(); });
+$("#cal-next").addEventListener("click",()=>{ calM++; if(calM>11){calM=0;calY++;} renderCalendar(); });
+$("#cal-today").addEventListener("click",()=>{ const n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); renderCalendar(); });
+
+// ---- time series (stock-style ranges, live) ----
+let TS_RANGE = "1m";
+function niceMax(v){ const e=Math.pow(10,Math.floor(Math.log10(v))); const m=v/e; return (m<=1?1:m<=2?2:m<=5?5:10)*e; }
+function tsLabel(ts, unit, range){
+  const d=new Date(ts);
+  if(unit==='hour'){
+    if(range==='1d'){ return d.getHours()+':00'; }   // 24-hour: 9:00, 14:00
+    return (d.getMonth()+1)+'/'+d.getDate();
+  }
+  if(range==='1m') return (d.getMonth()+1)+'/'+d.getDate();
+  return MONTHS[d.getMonth()].slice(0,3)+(d.getMonth()===0?" "+d.getFullYear():"");
+}
+async function loadSeries(range){
+  TS_RANGE = range || TS_RANGE;
+  document.querySelectorAll('#ts-range button').forEach(b=>b.classList.toggle('on', b.dataset.r===TS_RANGE));
+  try{ drawSeries(await (await fetch('/api/series?range='+encodeURIComponent(TS_RANGE))).json()); }catch(e){}
+}
+function drawSeries(data){
+  const svg=$("#ts-svg"); svg.innerHTML="";
+  const buckets=data.buckets||[]; const cap=$("#ts-cap");
+  const W=880,H=290,L=60,R=22,T=14,B=28,plotW=W-L-R,plotH=H-T-B;
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  if(!buckets.length){ cap.textContent='No data in this range yet.'; return; }
+  const isLog=data.scale==='log';
+  let maxv=0; buckets.forEach(b=>TOOLS.forEach(t=>{const v=(b.tools||{})[t.k]||0; if(v>maxv)maxv=v;}));
+  if(maxv<=0)maxv=1;
+  const n=buckets.length, xAt=i=> L+(n<=1?0.5:(i/(n-1)))*plotW;
+  let yAt, ticks=[];
+  if(isLog){ const hi=Math.max(4,Math.ceil(Math.log10(maxv))), lo=Math.max(0,hi-7);
+    yAt=v=> T+(1-(Math.log10(Math.max(v,Math.pow(10,lo)))-lo)/(hi-lo))*plotH;
+    for(let e=lo;e<=hi;e++) ticks.push(Math.pow(10,e));
+  } else { const top=niceMax(maxv); yAt=v=> T+(1-(v/top))*plotH; for(let k=0;k<=4;k++) ticks.push(top*k/4); }
+  const axis=svgEl("g",{},svg);
+  ticks.forEach(v=>{const y=yAt(v); const g=svgEl("g",{class:"tick"},axis);
+    svgEl("line",{x1:L,y1:y,x2:L+plotW,y2:y},g);
+    svgEl("text",{x:L-8,y:y+3,"text-anchor":"end",class:"ticklbl"},g).textContent=fmt(v);});
+  svgEl("text",{x:14,y:T+plotH/2,class:"axislabel",transform:`rotate(-90 14 ${T+plotH/2})`,"text-anchor":"middle"},axis).textContent=(data.unit==='hour'?'Tokens / hour':'Tokens / day')+(isLog?' — log':'');
+  const every=Math.max(1,Math.round(n/7)); let lastLab="";
+  buckets.forEach((b,i)=>{ if(i%every!==0 && i!==n-1) return;
+    const lab=tsLabel(b.ts,data.unit,data.range); if(lab===lastLab) return; lastLab=lab;
+    svgEl("text",{x:xAt(i),y:H-8,"text-anchor":"middle",class:"ticklbl"},svgEl("g",{class:"tick"},svg)).textContent=lab; });
+  TOOLS.forEach(t=>{ let seg=[];
+    const flush=()=>{ if(seg.length>1) svgEl("polyline",{points:seg.join(" "),fill:"none",stroke:t.c,"stroke-width":1.8,"stroke-linejoin":"round","stroke-linecap":"round"},svg);
+      else if(seg.length===1){const[x,y]=seg[0].split(",");svgEl("circle",{cx:x,cy:y,r:2.2,fill:t.c},svg);} seg=[]; };
+    buckets.forEach((b,i)=>{ const v=(b.tools||{})[t.k]||0; if(v>0) seg.push(`${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`); else flush(); });
+    flush(); });
+  $("#ts-legend").innerHTML=TOOLS.map(t=>`<span style="display:flex;gap:5px;align-items:center"><span class="dot" style="background:${t.c}"></span>${t.k}</span>`).join("");
+  const rl={"1d":"last 24 hours","5d":"last 5 days","1m":"last 30 days","all":"all time"}[data.range]||"";
+  cap.textContent=`Tokens per ${data.unit} · ${rl}${isLog?' · log scale':''} · updates live.`;
+}
+document.getElementById("ts-range").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b&&b.dataset.r) loadSeries(b.dataset.r); });
+
+function renderProjects(byProject){
+  const el=$("#projects"); el.innerHTML="";
+  if(!byProject.length){el.innerHTML='<div class="sub">No project data.</div>';return;}
+  const max=byProject[0][1]||1;
+  byProject.slice(0,15).forEach(([name,tot,tools])=>{
+    const segs=TOOLS.filter(t=>tools[t.k]).map(t=>`<span style="width:${(tools[t.k]/tot*100).toFixed(1)}%;background:${t.c}"></span>`).join("");
+    const row=document.createElement("div"); row.className="projrow";
+    row.innerHTML=`<div class="projname" title="${esc(name)}">${esc(name)}</div><div class="bar" style="width:${Math.max(4,tot/max*100).toFixed(1)}%">${segs}</div><div class="projtok">${fmt(tot)}</div>`;
+    el.appendChild(row);
+  });
+}
+function renderWhy(rows){
+  const el=$("#why"); el.innerHTML="";
+  if(!rows||!rows.length){el.innerHTML='<div class="sub">No session data yet.</div>';return;}
+  const max=rows[0][3]||1;
+  rows.slice(0,15).forEach(([title,proj,tool,tok])=>{
+    const c=COLOR[tool]||"#999"; const row=document.createElement("div"); row.className="projrow";
+    row.innerHTML=`<div class="projname" title="${esc(title)} · ${esc(proj)}"><span class="dot" style="background:${c};margin-right:6px"></span>${esc(title)}</div><div class="bar" style="width:${Math.max(4,tok/max*100).toFixed(1)}%"><span style="width:100%;background:${c}"></span></div><div class="projtok">${fmt(tok)}</div>`;
+    el.appendChild(row);
+  });
+}
+function renderTop10(days){
+  const tb=$("#top10"); tb.innerHTML="";
+  [...days].sort((a,b)=>b.total-a.total).slice(0,10).forEach((d,i)=>{
+    const tools=TOOLS.filter(t=>(d.byTool||{})[t.k]).map(t=>`<span class="dot" title="${t.k}: ${fmt(d.byTool[t.k])}" style="background:${t.c};margin-right:3px"></span>`).join("");
+    const proj=(d.topProjects||[]).map(p=>esc(p[0])).slice(0,3).join(", ")||"—";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="rank">${i+1}</td><td>${d.date}</td><td class="num">${fmt(d.total)}</td><td>${tools}</td><td style="color:var(--muted)">${proj}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+// ---- running now (merged: chats + processes, one titled list) ----
+function renderLive(d){
+  d=d||{};
+  $("#live-at").textContent = d.at ? ("as of "+d.at) : "";
+  // ---- system + burn strip ----
+  const strip=$("#live-strip"); const b=d.burn||{}; const sy=d.system||{};
+  const ramGB = sy.aiRamMB!=null ? (sy.aiRamMB>=1024?(sy.aiRamMB/1024).toFixed(1)+" GB":Math.round(sy.aiRamMB)+" MB") : "—";
+  const memSub = (sy.memUsedGB!=null&&sy.memTotalGB!=null) ? `${sy.memUsedGB} / ${sy.memTotalGB} GB used` : "";
+  const loadSub = (sy.load!=null&&sy.cores) ? `load ${sy.load} · ${sy.cores} cores` : "";
+  if(!strip.dataset.built){
+    strip.innerHTML =
+      `<div class="lstat fire"><div class="lk">Burning now ${hlp("How fast you're using tokens right now — a per-minute rate averaged over the last 10 minutes. Think of it as a speedometer for token spend; the small number is the total in those 10 minutes.")}</div><div class="lv" id="lv-burn">—</div><div class="lsub" id="ls-burn"></div></div>`+
+      `<div class="lstat"><div class="lk">AI CPU ${hlp("Share of your Mac's processor being used by AI tools right now. 'load' is how busy the whole machine is, across your CPU cores.")}</div><div class="lv" id="lv-cpu">—</div><div class="lsub" id="ls-cpu"></div></div>`+
+      `<div class="lstat"><div class="lk">AI memory ${hlp("How much RAM (memory) all your AI tools are using together right now.")}</div><div class="lv" id="lv-mem">—</div><div class="lsub">across AI processes</div></div>`+
+      `<div class="lstat"><div class="lk">System memory ${hlp("How much of your Mac's total memory is in use right now (by everything, not just AI).")}</div><div class="lv" id="lv-sys">—</div><div class="lsub" id="ls-sys"></div></div>`;
+    strip.dataset.built = "1";
+  }
+  $("#lv-burn").textContent = fmt(b.perMin||0)+"/min"; $("#ls-burn").textContent = `${fmt(b.tokens||0)} in last ${b.windowMin||10} min`;
+  $("#lv-cpu").textContent = (sy.aiCpu!=null?sy.aiCpu:0)+"%"; $("#ls-cpu").textContent = loadSub;
+  $("#lv-mem").textContent = ramGB;
+  $("#lv-sys").textContent = (sy.memUsedGB!=null?sy.memUsedGB+" GB":"—"); $("#ls-sys").textContent = memSub;
+  const el=$("#running"), r=d.running||[];
+  if(!r.length){ el.innerHTML='<div class="livenote">Nothing active in the last 10 minutes.</div>'; }
+  else{
+    el.innerHTML=r.map(x=>{
+      const c=COLOR[x.tool]||"#999";
+      const burn = (x.burnMin>0) ? `<span class="burnchip" title="tokens burned by this session in the last 10 min">${fmt(x.burnMin)}/min</span>` : "";
+      return `<div class="liverow"><span class="dot" style="background:${c}"></span>`+
+             `<span class="nm" title="${esc(x.title)}">${esc(x.title)}</span>`+
+             `<span class="livekind">${esc(x.tool)}</span>`+
+             `${burn}<span class="meta">${esc(x.meta||'')}</span></div>`;
+    }).join("");
+  }
+  const idle=$("#idle-note"), ids=d.idle||[];
+  let idleHtml = ids.length ? ids.map(g=>
+     `<div class="idlerow"><span class="dot" style="background:${COLOR[g.tool]||'#999'};opacity:.5"></span>`+
+     `+ ${g.count} idle ${esc(g.tool)} process${g.count>1?'es':''} · up to ${esc(g.uptime)} · ${esc(g.ram||'')} · ~0% CPU (likely leftovers)</div>`).join("") : "";
+  const lo = d.leftovers||{};
+  if(lo.count>0){
+    idleHtml += `<div class="leftoverbar"><span class="lotext">${lo.count} idle leftover process${lo.count>1?'es':''} can be safely quit — frees ~${lo.freedMB} MB. Your active sessions are protected.</span>`+
+      `<button class="fixbtn" onclick="quitLeftovers(this)">Quit idle leftovers</button>${hlp("Ends stray, idle AI processes (0% CPU) that are just sitting in memory — usually leftovers from finished tasks or automations. It frees memory and will NOT touch the sessions you're actively using.")}<span class="fixstatus"></span></div>`;
+  }
+  idle.innerHTML = idleHtml;
+  // live insights so removals (automations / login agents) disappear within seconds
+  if(d.insights) renderInsights(d.insights);
+}
+async function pollLive(){ try{ renderLive(await (await fetch("/api/live")).json()); }catch(e){} }
+
+// ---- sub-agents & agent activity ----
+function agoShort(s){ s=+s||0; return s<60?s+"s":(s<3600?Math.round(s/60)+"m":Math.round(s/3600)+"h"); }
+function renderAgents(runs){
+  const el=$("#agents");
+  if(!runs||!runs.length){ el.innerHTML='<div class="anote">No agent runs in the last 30 minutes. When you run Codex, Claude Code, or a Cowork task, its live activity — tools touched, code patches, and any sub-agents it spawns — appears here.</div>'; return; }
+  el.innerHTML=runs.map(r=>{
+    const c=COLOR[r.tool]||"#999";
+    const tools=(r.topTools||[]).map(([n,k])=>`<span class="achip"><b>${esc(n)}</b> ${k}</span>`).join("");
+    const extra=[];
+    if(r.toolCalls) extra.push(`<span class="achip">${r.toolCalls} tool call${r.toolCalls>1?'s':''}</span>`);
+    if(r.patches) extra.push(`<span class="achip">${r.patches} code patch${r.patches>1?'es':''}</span>`);
+    if(r.mcp) extra.push(`<span class="achip">${r.mcp} MCP call${r.mcp>1?'s':''}</span>`);
+    if(r.reasoning) extra.push(`<span class="achip">${r.reasoning} reasoning step${r.reasoning>1?'s':''}</span>`);
+    const subs=(r.subagents||[]).length ? `<div class="asub"><div class="salabel">Sub-agents (${r.subagents.length})</div>`+
+       r.subagents.map(s=>`<div class="sa"><span class="saty">▸</span><span>${esc(s.desc||s.type||'sub-agent')}${s.type?` <span style="color:var(--muted)">(${esc(s.type)})</span>`:''}</span></div>`).join("")+`</div>` : "";
+    const feed=(r.recent||[]).length ? `<div class="afeed">${r.recent.map(x=>esc(x)).join(" &nbsp;·&nbsp; ")}</div>` : "";
+    const titleHtml = r.file
+      ? `<a class="atitle alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" title="Open this chat's full transcript in a new tab">${esc(r.title)} ↗</a>`
+      : `<span class="atitle" title="${esc(r.title)}">${esc(r.title)}</span>`;
+    return `<div class="arun"><div class="ahead"><span class="dot" style="background:${c}"></span>`+
+      `${titleHtml}`+
+      `<span class="livekind">${esc(r.tool)}</span>`+
+      `<span class="astatus ${esc(r.status)}">${esc(r.status)}</span>`+
+      `<span class="ameta">${agoShort(r.ago)} ago</span></div>`+
+      `<div class="achips">${tools}${extra.join("")}</div>${subs}${feed}</div>`;
+  }).join("");
+}
+async function pollAgents(){ try{ const d=await (await fetch("/api/agents")).json(); renderAgents(d.runs); }catch(e){} }
+
+// ---- efficiency (ranked) + waste (one-click fix) ----
+const FIX_TOKEN = "__FIX_TOKEN__";
+function renderInsights(ins){
+  ins=ins||{};
+  const se=$("#suggestions");
+  if(se){ const s=ins.suggestions||[];
+    se.innerHTML = s.length ? s.map((x,i)=>{
+      const rev = x.reveal ? `<button class="revealbtn" onclick="toggleReveal(this)">${esc(x.revealLabel||'Details')}</button>`+
+        `<div class="revealbox" style="display:none">${String(x.reveal).split('\n').map(l=>`<div>${esc(l)}</div>`).join('')}</div>` : '';
+      return `<div class="sug"><span class="rank">${i+1}</span><div><span class="tag">${esc(x.tag||'')}</span><div>${esc(x.text)}</div>${rev}</div></div>`;
+    }).join("")
+      : '<div class="livenote">Not enough data yet for tailored suggestions.</div>'; }
+  const we=$("#waste");
+  if(we){ const w=ins.waste||[];
+    we.innerHTML = w.length ? w.map((x,i)=>{
+      const metric = x.metric ? `<div class="wm">${esc(x.metric)}</div>` : '';
+      const exp = `<div class="wexp">`+
+        (x.what?`<div class="row"><span class="lab">What it is</span><span class="val">${esc(x.what)}</span></div>`:'')+
+        (x.usage?`<div class="row"><span class="lab">Your usage</span><span class="val">${esc(x.usage)}</span></div>`:'')+
+        (x.impact?`<div class="row"><span class="lab">If you remove it</span><span class="val">${esc(x.impact)}</span></div>`:'')+
+        `</div>`;
+      let action;
+      if(x.executable && x.agent){
+        action = `<div class="fixbar"><button class="fixbtn" data-agent="${esc(x.agent)}" onclick="applyFix(this)">Fix it for me</button>${hlp("One click turns this login item off now and stops it starting at login, then moves its setup file to the Trash so it's fully reversible. Nothing else is deleted.")}<span class="fixstatus"></span></div>`;
+      } else {
+        action = x.how ? `<div class="wh">${esc(x.how)}</div>` : '';
+      }
+      return `<div class="wrow"><div class="wl">${esc(x.label)}</div>${metric}${exp}${action}</div>`;
+    }).join("")
+      : '<div class="wnote">✓ Nothing flagged — no background AI automations or login agents are burning tokens unattended.</div>'; }
+}
+// ---- tracked tools (custom sources) ----
+function renderSources(d){
+  const el=$("#sources"); if(!el) return;
+  const rows=["Claude Code","Cowork","Codex"].map(n=>
+    `<div class="srow"><span class="dot" style="background:${COLOR[n]||'#999'}"></span><span class="snm">${n}</span><span class="smeta">built-in</span></div>`);
+  (d.customSources||[]).forEach(s=>{
+    const meta=[s.glob?("logs: "+esc(s.glob)):"", s.process?("process: "+esc(s.process)):""].filter(Boolean).join(" · ");
+    rows.push(`<div class="srow"><span class="dot" style="background:${COLOR[s.name]||'#999'}"></span><span class="snm">${esc(s.name)}</span><span class="smeta">${meta}</span><button class="srm" onclick="removeSource('${encodeURIComponent(s.name)}')">Remove</button></div>`);
+  });
+  el.innerHTML=rows.join("");
+}
+async function addSource(){
+  const st=$("#src-status"); st.className="fixstatus"; st.textContent="Saving…";
+  const body={name:$("#src-name").value, glob:$("#src-glob").value, tokenKeys:$("#src-keys").value, tsKeys:$("#src-ts").value, process:$("#src-proc").value, token:FIX_TOKEN};
+  try{
+    const r=await fetch("/api/add_source",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json());
+    if(r.ok){ st.className="fixstatus ok"; st.textContent="✓ "+(r.message||"Added."); ["src-name","src-glob","src-keys","src-ts","src-proc"].forEach(id=>$("#"+id).value=""); setTimeout(load,1400); }
+    else { st.className="fixstatus err"; st.textContent="✗ "+(r.error||"Failed."); }
+  }catch(e){ st.className="fixstatus err"; st.textContent="✗ Couldn't reach the tracker server."; }
+}
+async function removeSource(encName){
+  const name=decodeURIComponent(encName);
+  if(!confirm("Stop tracking “"+name+"”?\n\nThis only removes it from the tracker — your logs aren't touched.")) return;
+  try{ await fetch("/api/remove_source",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name, token:FIX_TOKEN})}); setTimeout(load,1000); }catch(e){}
+}
+function toggleReveal(btn){
+  const box=btn.nextElementSibling; if(!box) return;
+  const open=box.style.display!=='none';
+  box.style.display=open?'none':'block'; btn.classList.toggle('open', !open);
+}
+async function quitLeftovers(btn){
+  if(!confirm("Quit the idle leftover AI processes?\n\nThis frees memory by ending stray/orphaned background processes. Your active sessions and the apps you're using are protected.")) return;
+  const status = btn.parentElement.querySelector(".fixstatus");
+  btn.disabled=true; status.className="fixstatus"; status.textContent="Working…";
+  try{
+    const r = await fetch("/api/kill_leftovers",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:FIX_TOKEN})}).then(r=>r.json());
+    if(r.ok){ status.className="fixstatus ok"; status.textContent=`✓ Quit ${r.count} process${r.count===1?'':'es'} · freed ~${r.freedMB} MB.`; setTimeout(pollLive, 800); }
+    else { status.className="fixstatus err"; status.textContent="✗ "+(r.error||"Failed."); btn.disabled=false; }
+  }catch(e){ status.className="fixstatus err"; status.textContent="✗ Couldn't reach the tracker server."; btn.disabled=false; }
+}
+async function applyFix(btn){
+  const agent = btn.getAttribute("data-agent");
+  if(!confirm("Disable “"+agent+"” now and at every future login?\n\nThe file moves to Trash, so it's fully reversible.")) return;
+  const status = btn.parentElement.querySelector(".fixstatus");
+  btn.disabled=true; status.className="fixstatus"; status.textContent="Working…";
+  try{
+    const r = await fetch("/api/fix",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:FIX_TOKEN, agent})}).then(r=>r.json());
+    if(r.ok){ status.className="fixstatus ok"; status.textContent="✓ "+(r.message||"Done."); btn.remove(); }
+    else { status.className="fixstatus err"; status.textContent="✗ "+(r.error||"Failed."); btn.disabled=false; }
+  }catch(e){ status.className="fixstatus err"; status.textContent="✗ Couldn't reach the tracker server."; btn.disabled=false; }
+}
+
+$("#refresh").addEventListener("click",async()=>{
+  $("#loading").classList.remove("hidden"); $("#lmsg").textContent="Rescanning…";
+  try{ await fetch("/api/refresh"); }catch(e){}
+  setTimeout(load, 600);
+});
+// suppress hover tooltips while scrolling (stops the dark tooltip flashing past the cursor)
+(function(){ let t; addEventListener('scroll', ()=>{ document.body.classList.add('is-scrolling'); clearTimeout(t); t=setTimeout(()=>document.body.classList.remove('is-scrolling'), 220); }, {passive:true}); })();
+// theme switcher (Light / Dark / Soft), saved per person
+(function(){
+  const ts=document.getElementById('theme-switch'); if(!ts) return;
+  const setOn=t=>ts.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.dataset.theme===t));
+  setOn(document.documentElement.dataset.theme||'light');
+  ts.addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    const t=b.dataset.theme; document.documentElement.dataset.theme=t;
+    try{ localStorage.setItem('tbTheme', t); }catch(e){} setOn(t);
+  });
+})();
+// sidebar smooth-scroll nav
+(function(){
+  const sb=document.querySelector('.sidebar'); if(!sb) return;
+  sb.addEventListener('click', e=>{
+    const a=e.target.closest('.nav'); if(!a) return; e.preventDefault();
+    sb.querySelectorAll('.nav').forEach(n=>n.classList.remove('on')); a.classList.add('on');
+    const k=a.dataset.go;
+    if(k==='overview'){ window.scrollTo({top:0,behavior:'smooth'}); return; }
+    const h=[...document.querySelectorAll('.panel h2')].find(x=>x.textContent.includes(k));
+    const target = h ? (h.closest('.panel') || h) : null;
+    if(target) target.scrollIntoView({behavior:'smooth', block:'center'});  // center the section in the viewport
+  });
+})();
+// customize layout — show / hide / reorder sections, saved per person
+(function(){
+  const LKEY='tbLayout';
+  const dash=document.getElementById('dash'); if(!dash) return;
+  const panelEls=()=>[...dash.querySelectorAll(':scope > .panel')];
+  const pname=p=>{ const h=p.querySelector('h2'); const n=h&&h.childNodes[0]?h.childNodes[0].textContent:(h?h.textContent:''); return (n||'Section').trim(); };
+  const pkey=p=>pname(p).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,28)||'sec';
+  let LAYOUT={order:[],hidden:{}};
+  panelEls().forEach(p=>{ if(!p.dataset.key) p.dataset.key=pkey(p); });
+  const ORIGINAL=panelEls().map(p=>p.dataset.key);
+  try{ const s=JSON.parse(localStorage.getItem(LKEY)); if(s&&Array.isArray(s.order)) LAYOUT={order:s.order, hidden:s.hidden||{}}; }catch(e){}
+  const keymap=()=>{ const m={}; panelEls().forEach(p=>m[p.dataset.key]=p); return m; };
+  function normalize(){ const m=keymap(); LAYOUT.order=(LAYOUT.order||[]).filter(k=>m[k]); ORIGINAL.forEach(k=>{ if(!LAYOUT.order.includes(k)) LAYOUT.order.push(k); }); LAYOUT.hidden=LAYOUT.hidden||{}; return m; }
+  function apply(){ const m=normalize(); LAYOUT.order.forEach(k=>{ const p=m[k]; if(p){ dash.appendChild(p); p.style.display=LAYOUT.hidden[k]?'none':''; } }); }
+  const save=()=>{ try{ localStorage.setItem(LKEY, JSON.stringify(LAYOUT)); }catch(e){} };
+  apply();
+  const modal=document.getElementById('layout-modal'), list=document.getElementById('layout-list');
+  function renderList(){ const m=normalize();
+    list.innerHTML=LAYOUT.order.map((k,i)=>{ const nm=m[k]?pname(m[k]):k; const vis=!LAYOUT.hidden[k];
+      return `<div class="lrow" draggable="true" data-key="${esc(k)}"><span class="grip" title="Drag to reorder">&#10287;</span><span class="lname">${esc(nm)}</span>`+
+        `<button class="liconbtn lvis ${vis?'':'off'}">${vis?'Shown':'Hidden'}</button>`+
+        `<button class="liconbtn lup" ${i===0?'disabled':''}>&#8593;</button>`+
+        `<button class="liconbtn ldown" ${i===LAYOUT.order.length-1?'disabled':''}>&#8595;</button></div>`; }).join(""); }
+  let dragKey=null;
+  list.addEventListener('dragstart', e=>{ const r=e.target.closest('.lrow'); if(!r) return; dragKey=r.dataset.key; r.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', dragKey); }catch(_){} });
+  list.addEventListener('dragend', ()=>{ list.querySelectorAll('.lrow').forEach(r=>r.classList.remove('dragging','dragover')); dragKey=null; });
+  list.addEventListener('dragover', e=>{ e.preventDefault(); const r=e.target.closest('.lrow'); list.querySelectorAll('.lrow').forEach(x=>x.classList.toggle('dragover', x===r && r.dataset.key!==dragKey)); });
+  list.addEventListener('drop', e=>{ e.preventDefault(); const r=e.target.closest('.lrow'); if(!r||!dragKey) return; const tgt=r.dataset.key; if(tgt!==dragKey){ const o=LAYOUT.order; o.splice(o.indexOf(dragKey),1); o.splice(o.indexOf(tgt),0,dragKey); save(); apply(); renderList(); } dragKey=null; });
+  const ob=document.getElementById('customize-open');
+  if(ob) ob.addEventListener('click',()=>{ renderList(); modal.style.display='flex'; });
+  document.getElementById('layout-close').addEventListener('click',()=>modal.style.display='none');
+  modal.addEventListener('click',e=>{ if(e.target===modal) modal.style.display='none'; });
+  document.getElementById('layout-reset').addEventListener('click',()=>{ LAYOUT={order:ORIGINAL.slice(),hidden:{}}; save(); apply(); renderList(); });
+  list.addEventListener('click',e=>{ const row=e.target.closest('.lrow'); if(!row) return; const k=row.dataset.key, o=LAYOUT.order, i=o.indexOf(k);
+    if(e.target.closest('.lvis')) LAYOUT.hidden[k]=!LAYOUT.hidden[k];
+    else if(e.target.closest('.lup')&&i>0){ [o[i-1],o[i]]=[o[i],o[i-1]]; }
+    else if(e.target.closest('.ldown')&&i<o.length-1){ [o[i+1],o[i]]=[o[i],o[i+1]]; }
+    else return;
+    save(); apply(); renderList(); });
+})();
+load();
+pollLive(); pollAgents();
+setInterval(()=>{ pollLive(); pollAgents(); loadSeries(TS_RANGE); }, 8000);
+</script>
+</body>
+</html>
