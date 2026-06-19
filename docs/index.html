@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Burn Tracker — see where your AI tokens go, privately</title>
+<meta name="description" content="A 100% local dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live on your own Mac. Nothing leaves your machine.">
+<style>
+  :root{
+    --bg:#f4f3ee; --ink:#1a1a17; --muted:#6b6a63; --rule:#e6e3da; --panel:#fff;
+    --accent:#1f7a34; --accent2:#36b85a; --claude:#d4663a; --cowork:#6e56cf; --codex:#10a37f;
+    --shadow:0 1px 2px rgba(28,27,24,.05), 0 14px 36px rgba(28,27,24,.09);
+    --shadow-sm:0 1px 2px rgba(28,27,24,.05), 0 6px 18px rgba(28,27,24,.07);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth; background-color:var(--bg); color-scheme:light}
+  body{margin:0; background:
+      radial-gradient(1200px 600px at 84% -10%, #eaf6ee 0%, rgba(234,246,238,0) 60%),
+      linear-gradient(180deg,#f7f6f1,#f1efe8);
+    color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; letter-spacing:-.006em; line-height:1.55}
+  a{color:inherit}
+  .wrap{max-width:1060px; margin:0 auto; padding:0 22px}
+
+  /* nav */
+  nav{position:sticky; top:0; z-index:20; backdrop-filter:saturate(150%) blur(12px);
+    background:rgba(247,246,241,.78); border-bottom:1px solid var(--rule)}
+  nav .wrap{display:flex; align-items:center; gap:14px; height:62px}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; letter-spacing:-.02em}
+  .logo{width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 3px 10px rgba(31,122,52,.32)}
+  nav .sp{flex:1}
+  nav a.link{color:var(--muted); text-decoration:none; font-size:14px; font-weight:550; margin:0 10px}
+  nav a.link:hover{color:var(--ink)}
+  .btn{display:inline-flex; align-items:center; gap:8px; font-weight:650; font-size:14px; text-decoration:none;
+    padding:9px 16px; border-radius:11px; border:1px solid var(--rule); background:var(--panel); color:var(--ink);
+    box-shadow:var(--shadow-sm); transition:transform .12s, box-shadow .12s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; border-color:transparent;
+    box-shadow:0 6px 18px rgba(31,122,52,.32)}
+
+  /* hero */
+  header.hero{padding:72px 0 30px; text-align:center}
+  .badge{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:650; color:var(--accent);
+    background:rgba(31,122,52,.10); border:1px solid rgba(31,122,52,.22); padding:5px 12px; border-radius:999px}
+  .badge .dot{width:7px; height:7px; border-radius:50%; background:var(--accent2); box-shadow:0 0 0 3px rgba(54,184,90,.25)}
+  h1{font-size:clamp(34px,5.4vw,56px); line-height:1.05; letter-spacing:-.03em; margin:20px auto 0; max-width:14ch; font-weight:760}
+  .sub{font-size:clamp(16px,2.2vw,20px); color:var(--muted); max-width:60ch; margin:18px auto 0}
+  .cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:30px}
+  .meta{margin-top:16px; font-size:13px; color:var(--muted)}
+  .meta b{color:var(--ink); font-weight:650}
+
+  /* dashboard preview mockup */
+  .preview{margin:46px auto 0; max-width:920px}
+  .window{background:var(--panel); border:1px solid var(--rule); border-radius:16px; overflow:hidden; box-shadow:var(--shadow)}
+  .titlebar{display:flex; align-items:center; gap:7px; padding:11px 14px; border-bottom:1px solid var(--rule); background:#fbfaf7}
+  .tl{width:11px; height:11px; border-radius:50%}
+  .tl.r{background:#ff5f57} .tl.y{background:#febc2e} .tl.g{background:#28c840}
+  .titlebar .addr{margin-left:10px; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .screen{padding:18px 18px 22px}
+  .pcards{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+  .pcard{border:1px solid var(--rule); border-radius:12px; padding:12px 13px; background:#fff}
+  .pcard .k{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:650}
+  .pcard .v{font-size:23px; font-weight:730; letter-spacing:-.02em; margin-top:5px; font-variant-numeric:tabular-nums}
+  .pcard.accent{background:linear-gradient(180deg,#eef8f0,#e7f4ea); border-color:#cde8d4}
+  .strip{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px}
+  .lstat{border:1px solid var(--rule); border-radius:11px; padding:10px 12px; background:#fff}
+  .lstat .k{font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:650}
+  .lstat .v{font-size:16px; font-weight:700; margin-top:3px}
+  .lstat.fire{background:linear-gradient(180deg,#fdf1e9,#fbe9dd); border-color:#f3d3bd}
+  .lstat.fire .v{color:#b9521f}
+  .bars{margin-top:14px; border-top:1px solid var(--rule); padding-top:13px}
+  .bars .lbl{font-size:11px; color:var(--muted); font-weight:600; margin-bottom:8px}
+  .brow{display:flex; align-items:center; gap:9px; font-size:12px; margin:6px 0}
+  .brow .nm{width:120px; color:#43423c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .brow .track{flex:1; height:9px; border-radius:6px; background:#f0eee6; overflow:hidden}
+  .brow .fill{height:100%; border-radius:6px}
+  .brow .bv{width:62px; text-align:right; font-variant-numeric:tabular-nums; color:#6b6a63; font-weight:600}
+
+  /* sections */
+  section{padding:54px 0}
+  h2{font-size:clamp(24px,3.4vw,33px); letter-spacing:-.025em; margin:0 0 6px; font-weight:730; text-align:center}
+  .lead{color:var(--muted); text-align:center; max-width:58ch; margin:0 auto 32px; font-size:16px}
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  .feat{background:var(--panel); border:1px solid var(--rule); border-radius:15px; padding:20px; box-shadow:var(--shadow-sm)}
+  .feat .ic{width:38px; height:38px; border-radius:10px; background:rgba(31,122,52,.10); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; margin-bottom:12px}
+  .feat h3{margin:0 0 5px; font-size:16px; font-weight:680; letter-spacing:-.01em}
+  .feat p{margin:0; color:var(--muted); font-size:14px}
+
+  /* steps */
+  .steps{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; counter-reset:s}
+  .step{background:var(--panel); border:1px solid var(--rule); border-radius:15px; padding:22px 20px; box-shadow:var(--shadow-sm); position:relative}
+  .step::before{counter-increment:s; content:counter(s); position:absolute; top:-13px; left:20px; width:28px; height:28px;
+    border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-weight:700;
+    display:flex; align-items:center; justify-content:center; font-size:14px; box-shadow:0 4px 10px rgba(31,122,52,.3)}
+  .step h3{margin:8px 0 6px; font-size:16px; font-weight:680}
+  .step p{margin:0; color:var(--muted); font-size:14px}
+  .step code{background:#f1efe8; border:1px solid var(--rule); border-radius:6px; padding:1px 6px; font-size:12.5px}
+
+  /* privacy */
+  .privacy{background:linear-gradient(180deg,#eef8f0,#e7f4ea); border:1px solid #cde8d4; border-radius:18px; padding:34px 30px; box-shadow:var(--shadow-sm)}
+  .privacy h2{text-align:left}
+  .privacy ul{margin:14px 0 0; padding:0; list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:12px 26px}
+  .privacy li{display:flex; gap:10px; font-size:14.5px; align-items:flex-start}
+  .privacy li svg{flex:none; margin-top:2px; color:var(--accent)}
+  .privacy b{font-weight:650}
+
+  footer{border-top:1px solid var(--rule); padding:30px 0 60px; color:var(--muted); font-size:13px; text-align:center}
+  footer a{color:var(--accent); text-decoration:none; font-weight:600}
+  footer .small{margin-top:10px; font-size:12px; opacity:.85}
+
+  @media (max-width:760px){
+    .pcards,.strip{grid-template-columns:repeat(2,1fr)}
+    .grid,.steps{grid-template-columns:1fr}
+    .privacy ul{grid-template-columns:1fr}
+    nav a.link{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2s5 4 5 9a5 5 0 01-10 0c0-2 1-3 1.5-3.5C9 9 9.5 10.5 11 10.5c0-3 1-5 1-8.5z" fill="currentColor"/></svg></span> Token Burn Tracker</span>
+    <span class="sp"></span>
+    <a class="link" href="#features">Features</a>
+    <a class="link" href="#run">Run it</a>
+    <a class="link" href="https://github.com/dluttz/token-burn-tracker">GitHub</a>
+    <a class="btn primary" href="https://github.com/dluttz/token-burn-tracker/archive/refs/heads/main.zip">Download</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge"><span class="dot"></span> 100% local · nothing leaves your Mac</span>
+    <h1>See where your AI tokens actually go.</h1>
+    <p class="sub">A private dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live, on your own machine. No account, no cloud, no telemetry.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/dluttz/token-burn-tracker/archive/refs/heads/main.zip">↓ Download for macOS</a>
+      <a class="btn" href="https://github.com/dluttz/token-burn-tracker">View source on GitHub</a>
+    </div>
+    <div class="meta"><b>macOS</b> · <b>Python 3</b> · open source (<b>MIT</b>) · v1.0.0</div>
+
+    <div class="preview">
+      <div class="window">
+        <div class="titlebar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="addr">localhost:8799</span></div>
+        <div class="screen">
+          <div class="pcards">
+            <div class="pcard accent"><div class="k">Today</div><div class="v">640.7M</div></div>
+            <div class="pcard"><div class="k">This week</div><div class="v">4.37B</div></div>
+            <div class="pcard"><div class="k">This month</div><div class="v">9.62B</div></div>
+            <div class="pcard"><div class="k">All time</div><div class="v">15.6B</div></div>
+          </div>
+          <div class="strip">
+            <div class="lstat fire"><div class="k">Burning now</div><div class="v">2.5M/min</div></div>
+            <div class="lstat"><div class="k">AI CPU</div><div class="v">1.8%</div></div>
+            <div class="lstat"><div class="k">AI memory</div><div class="v">574 MB</div></div>
+            <div class="lstat"><div class="k">System memory</div><div class="v">13.2 GB</div></div>
+          </div>
+          <div class="bars">
+            <div class="lbl">Where your tokens go — top projects</div>
+            <div class="brow"><span class="nm">cowork sessions</span><span class="track"><span class="fill" style="width:100%;background:var(--cowork)"></span></span><span class="bv">12.5B</span></div>
+            <div class="brow"><span class="nm">atlas / backend</span><span class="track"><span class="fill" style="width:42%;background:var(--claude)"></span></span><span class="bv">979M</span></div>
+            <div class="brow"><span class="nm">options-swing</span><span class="track"><span class="fill" style="width:24%;background:var(--codex)"></span></span><span class="bv">456M</span></div>
+            <div class="brow"><span class="nm">video-labels</span><span class="track"><span class="fill" style="width:11%;background:var(--claude)"></span></span><span class="bv">341M</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Everything your tokens are doing</h2>
+    <p class="lead">One page, refreshed live from the logs your tools already write. No instrumentation, no SDK.</p>
+    <div class="grid">
+      <div class="feat"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg></div><h3>Running now</h3><p>Every active chat by its title, with live CPU, memory, and token burn rate — like Activity Monitor, for your AI tools.</p></div>
+      <div class="feat"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><h3>Usage breakdown</h3><p>Tokens grouped by tool, project, session, and day — so you can see exactly what's expensive.</p></div>
+      <div class="feat"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 3 4-7"/></svg></div><h3>Over time</h3><p>A stock-style chart with 1D / 5D / 1M / All ranges to watch your burn trend at a glance.</p></div>
+      <div class="feat"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></div><h3>Sub-agent tracker</h3><p>What each agent run is really doing inside — tools touched, edits, reasoning, and the sub-agents it spawns.</p></div>
+      <div class="feat"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg></div><h3>Cleanup</h3><p>Finds idle leftover processes you can safely quit to free memory — your active sessions are always protected.</p></div>
+      <div class="feat"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div><h3>Make it yours</h3><p>Light, Dark, and Soft themes, plus a drag-to-reorder layout so the page shows what you care about.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="run">
+  <div class="wrap">
+    <h2>Running in two minutes</h2>
+    <p class="lead">No build step, no dependencies to install — just Python 3, which most Macs already have.</p>
+    <div class="steps">
+      <div class="step"><h3>Download &amp; unzip</h3><p>Grab the zip and unzip it anywhere — Desktop, Downloads, wherever. It figures out its own location.</p></div>
+      <div class="step"><h3>Open <code>install.command</code></h3><p>Right-click it → <b>Open</b>. That clears the macOS download warning, checks for Python 3, and starts the dashboard.</p></div>
+      <div class="step"><h3>That's it</h3><p>Your browser opens to <code>localhost:8799</code>. Use <code>stop.command</code> to stop and <code>uninstall.command</code> to remove it cleanly.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="privacy">
+      <h2>Private by design</h2>
+      <ul>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>No outbound calls.</b> The server makes zero network requests — the only traffic is your browser talking to localhost.</span></li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Reads only local logs.</b> It uses the files your AI tools already write on your own machine.</span></li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Your prompts stay yours.</b> Cached data and the action token live only on your disk and are never shared.</span></li>
+        <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Open source.</b> Every line is on GitHub under the MIT license — read exactly what it does.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="btn primary" href="https://github.com/dluttz/token-burn-tracker/archive/refs/heads/main.zip">↓ Download for macOS</a>
+    &nbsp; <a class="btn" href="https://github.com/dluttz/token-burn-tracker">GitHub repo</a>
+    <div class="small" style="margin-top:18px">MIT License · © 2026 Daniel Lutts · v1.0.0 · requires macOS &amp; Python 3</div>
+    <div class="small">Works with Claude Code, Cowork, and Codex. Not affiliated with or endorsed by Anthropic or OpenAI; trademarks belong to their respective owners.</div>
+  </div>
+</footer>
+
+</body>
+</html>
