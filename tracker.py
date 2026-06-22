@@ -450,7 +450,8 @@ def summary():
     today_tool = next((x["byTool"] for x in days if x["date"] == todaystr), {})
     return {"loading": STATE["loading"], "grand": d.get("grand", 0), "today": d.get("today", 0),
             "week": d.get("week", 0), "byTool": d.get("byTool", {}),
-            "todayByTool": today_tool, "topWhy": d.get("bySession", [])[:5]}
+            "todayByTool": today_tool, "topWhy": d.get("bySession", [])[:5],
+            "accent": load_theme()["accent"], "primary": load_theme()["primary"]}
 
 # ---------- live: what's running now ----------
 def quick_title(path, kind, idx):
@@ -1414,14 +1415,42 @@ def series(rng):
     return out
 
 # ---------- server ----------
+THEME_FILE = os.path.join(HERE, "theme.json")
+def _is_hex(a):
+    return isinstance(a, str) and len(a) == 7 and a[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in a[1:])
+def load_theme():
+    t = {"primary": "", "accent": "#9c2a2c"}   # primary = background (empty until chosen), accent = highlight
+    try:
+        with open(THEME_FILE, "r", encoding="utf-8") as f:
+            j = json.load(f) or {}
+        if _is_hex(j.get("primary")): t["primary"] = j["primary"]
+        if _is_hex(j.get("accent")):  t["accent"]  = j["accent"]
+    except Exception:
+        pass
+    return t
+def save_theme(primary=None, accent=None):
+    t = load_theme()
+    if primary is not None and (primary == "" or _is_hex(primary)): t["primary"] = primary
+    if _is_hex(accent):  t["accent"]  = accent
+    try:
+        with open(THEME_FILE, "w", encoding="utf-8") as f:
+            json.dump(t, f)
+        return True
+    except Exception:
+        return False
+
 class Handler(http.server.BaseHTTPRequestHandler):
-    def _send(self, code, body, ct="application/json"):
+    def _send(self, code, body, ct="application/json", cors=False):
         b = body if isinstance(body, (bytes, bytearray)) else body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ct)
-        # No Access-Control-Allow-Origin: this server is local-only and same-origin for the
-        # dashboard; the widgets fetch via curl (not CORS). Withholding it stops other websites
-        # you visit from reading your data or the action token cross-origin.
+        # Local-only + same-origin for the dashboard; no CORS in general, so other websites can't
+        # read your data or the action token. EXCEPTION: the /api/theme color endpoint is CORS-open
+        # (cors=True) so the desktop widget can sync one accent color (a harmless string).
+        if cors:
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(b)))
         self.end_headers()
@@ -1440,7 +1469,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             try:
                 html = open(os.path.join(HERE, "tracker.html"), "r", encoding="utf-8").read()
-                html = html.replace("__FIX_TOKEN__", FIX_TOKEN)
+                _t = load_theme()
+                html = html.replace("__FIX_TOKEN__", FIX_TOKEN).replace("__ACCENT__", _t["accent"]).replace("__PRIMARY__", _t["primary"])
                 self._send(200, html, "text/html; charset=utf-8")
             except FileNotFoundError:
                 self._send(500, "tracker.html missing", "text/plain")
@@ -1448,6 +1478,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps(summary()))
         elif self.path.startswith("/api/live"):
             self._send(200, json.dumps(live_data()))
+        elif self.path.startswith("/api/theme"):
+            self._send(200, json.dumps(load_theme()))
         elif self.path.startswith("/api/leftovers"):
             self._send(200, json.dumps({"leftovers": find_leftovers()}))
         elif self.path.startswith("/api/agents"):
@@ -1480,6 +1512,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
+        if self.path.startswith("/api/theme"):   # shared accent color, set same-origin from the dashboard (no token; harmless color string)
+            if not self._local_host():
+                self._send(403, json.dumps({"ok": False})); return
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n) or b"{}")
+            except Exception:
+                self._send(400, json.dumps({"ok": False})); return
+            ok = save_theme(body.get("primary"), body.get("accent"))
+            self._send(200 if ok else 400, json.dumps(dict({"ok": ok}, **load_theme()))); return
         POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source")
         if not any(self.path.startswith(x) for x in POSTS):
             self._send(404, json.dumps({"error": "not found"})); return

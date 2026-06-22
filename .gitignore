@@ -10,6 +10,9 @@
 # User-added custom tool sources (local paths, personal config)
 custom_sources.json
 
+# Saved theme accent color (your personal choice)
+theme.json
+
 # Server stdout/stderr and any logs (may contain your username / paths)
 *.out
 *.log

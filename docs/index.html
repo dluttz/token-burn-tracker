@@ -5,10 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Token Burn Tracker — see where your AI tokens go, privately</title>
 <meta name="description" content="A 100% local dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live on your own Mac. Nothing leaves your machine.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Token Burn Tracker — see where your AI tokens go">
+<meta property="og:description" content="A 100% local dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, Codex. Live, on your own Mac. Nothing leaves your machine.">
+<meta property="og:image" content="https://dluttz.github.io/token-burn-tracker/og.png">
+<meta property="og:url" content="https://dluttz.github.io/token-burn-tracker/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Token Burn Tracker — see where your AI tokens go">
+<meta name="twitter:description" content="A 100% local dashboard for your AI coding token usage. macOS, open source, nothing leaves your Mac.">
+<meta name="twitter:image" content="https://dluttz.github.io/token-burn-tracker/og.png">
 <style>
   :root{
     --bg:#f4f3ee; --ink:#1a1a17; --muted:#6b6a63; --rule:#e6e3da; --panel:#fff;
-    --accent:#1f7a34; --accent2:#36b85a; --claude:#d4663a; --cowork:#6e56cf; --codex:#10a37f;
+    --accent:#9c2a2c; --accent2:#c0413f; --claude:#d4663a; --cowork:#6e56cf; --codex:#10a37f;
     --shadow:0 1px 2px rgba(28,27,24,.05), 0 14px 36px rgba(28,27,24,.09);
     --shadow-sm:0 1px 2px rgba(28,27,24,.05), 0 6px 18px rgba(28,27,24,.07);
   }
@@ -27,8 +36,8 @@
     background:rgba(247,246,241,.78); border-bottom:1px solid var(--rule)}
   nav .wrap{display:flex; align-items:center; gap:14px; height:62px}
   .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; letter-spacing:-.02em}
-  .logo{width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--accent),var(--accent2));
-    display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 3px 10px rgba(31,122,52,.32)}
+  .logo{width:30px; height:30px; border-radius:8px; background:#9c2a2c;
+    display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 3px 10px rgba(156,42,44,.32)}
   nav .sp{flex:1}
   nav a.link{color:var(--muted); text-decoration:none; font-size:14px; font-weight:550; margin:0 10px}
   nav a.link:hover{color:var(--ink)}
@@ -37,12 +46,12 @@
     box-shadow:var(--shadow-sm); transition:transform .12s, box-shadow .12s}
   .btn:hover{transform:translateY(-1px)}
   .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; border-color:transparent;
-    box-shadow:0 6px 18px rgba(31,122,52,.32)}
+    box-shadow:0 6px 18px rgba(156,42,44,.32)}
 
   /* hero */
   header.hero{padding:72px 0 30px; text-align:center}
   .badge{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:650; color:var(--accent);
-    background:rgba(31,122,52,.10); border:1px solid rgba(31,122,52,.22); padding:5px 12px; border-radius:999px}
+    background:rgba(156,42,44,.10); border:1px solid rgba(156,42,44,.22); padding:5px 12px; border-radius:999px}
   .badge .dot{width:7px; height:7px; border-radius:50%; background:var(--accent2); box-shadow:0 0 0 3px rgba(54,184,90,.25)}
   h1{font-size:clamp(34px,5.4vw,56px); line-height:1.05; letter-spacing:-.03em; margin:20px auto 0; max-width:14ch; font-weight:760}
   .sub{font-size:clamp(16px,2.2vw,20px); color:var(--muted); max-width:60ch; margin:18px auto 0}
@@ -52,7 +61,7 @@
 
   /* dashboard preview mockup */
   .preview{margin:46px auto 0; max-width:920px}
-  .window{background:var(--panel); border:1px solid var(--rule); border-radius:16px; overflow:hidden; box-shadow:var(--shadow)}
+  .shot{display:block; width:100%; height:auto; border:1px solid var(--rule); border-radius:16px; box-shadow:var(--shadow)}
   .titlebar{display:flex; align-items:center; gap:7px; padding:11px 14px; border-bottom:1px solid var(--rule); background:#fbfaf7}
   .tl{width:11px; height:11px; border-radius:50%}
   .tl.r{background:#ff5f57} .tl.y{background:#febc2e} .tl.g{background:#28c840}
@@ -62,7 +71,7 @@
   .pcard{border:1px solid var(--rule); border-radius:12px; padding:12px 13px; background:#fff}
   .pcard .k{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:650}
   .pcard .v{font-size:23px; font-weight:730; letter-spacing:-.02em; margin-top:5px; font-variant-numeric:tabular-nums}
-  .pcard.accent{background:linear-gradient(180deg,#eef8f0,#e7f4ea); border-color:#cde8d4}
+  .pcard.accent{background:linear-gradient(180deg,#fbeeee,#f7e4e4); border-color:#eccece}
   .strip{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:12px}
   .lstat{border:1px solid var(--rule); border-radius:11px; padding:10px 12px; background:#fff}
   .lstat .k{font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:650}
@@ -73,8 +82,8 @@
   .bars .lbl{font-size:11px; color:var(--muted); font-weight:600; margin-bottom:8px}
   .brow{display:flex; align-items:center; gap:9px; font-size:12px; margin:6px 0}
   .brow .nm{width:120px; color:#43423c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .brow .track{flex:1; height:9px; border-radius:6px; background:#f0eee6; overflow:hidden}
-  .brow .fill{height:100%; border-radius:6px}
+  .brow .track{flex:1; height:11px; border-radius:6px; background:#e6e3d9; overflow:hidden}
+  .brow .fill{height:100%; border-radius:6px; box-shadow:inset 0 -1px 0 rgba(0,0,0,.08)}
   .brow .bv{width:62px; text-align:right; font-variant-numeric:tabular-nums; color:#6b6a63; font-weight:600}
 
   /* sections */
@@ -83,7 +92,7 @@
   .lead{color:var(--muted); text-align:center; max-width:58ch; margin:0 auto 32px; font-size:16px}
   .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
   .feat{background:var(--panel); border:1px solid var(--rule); border-radius:15px; padding:20px; box-shadow:var(--shadow-sm)}
-  .feat .ic{width:38px; height:38px; border-radius:10px; background:rgba(31,122,52,.10); color:var(--accent);
+  .feat .ic{width:38px; height:38px; border-radius:10px; background:rgba(156,42,44,.10); color:var(--accent);
     display:flex; align-items:center; justify-content:center; margin-bottom:12px}
   .feat h3{margin:0 0 5px; font-size:16px; font-weight:680; letter-spacing:-.01em}
   .feat p{margin:0; color:var(--muted); font-size:14px}
@@ -93,13 +102,13 @@
   .step{background:var(--panel); border:1px solid var(--rule); border-radius:15px; padding:22px 20px; box-shadow:var(--shadow-sm); position:relative}
   .step::before{counter-increment:s; content:counter(s); position:absolute; top:-13px; left:20px; width:28px; height:28px;
     border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-weight:700;
-    display:flex; align-items:center; justify-content:center; font-size:14px; box-shadow:0 4px 10px rgba(31,122,52,.3)}
+    display:flex; align-items:center; justify-content:center; font-size:14px; box-shadow:0 4px 10px rgba(156,42,44,.3)}
   .step h3{margin:8px 0 6px; font-size:16px; font-weight:680}
   .step p{margin:0; color:var(--muted); font-size:14px}
   .step code{background:#f1efe8; border:1px solid var(--rule); border-radius:6px; padding:1px 6px; font-size:12.5px}
 
   /* privacy */
-  .privacy{background:linear-gradient(180deg,#eef8f0,#e7f4ea); border:1px solid #cde8d4; border-radius:18px; padding:34px 30px; box-shadow:var(--shadow-sm)}
+  .privacy{background:linear-gradient(180deg,#fbeeee,#f7e4e4); border:1px solid #eccece; border-radius:18px; padding:34px 30px; box-shadow:var(--shadow-sm)}
   .privacy h2{text-align:left}
   .privacy ul{margin:14px 0 0; padding:0; list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:12px 26px}
   .privacy li{display:flex; gap:10px; font-size:14.5px; align-items:flex-start}
@@ -122,7 +131,7 @@
 
 <nav>
   <div class="wrap">
-    <span class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2s5 4 5 9a5 5 0 01-10 0c0-2 1-3 1.5-3.5C9 9 9.5 10.5 11 10.5c0-3 1-5 1-8.5z" fill="currentColor"/></svg></span> Token Burn Tracker</span>
+    <span class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="1.7" fill="none" stroke="#e7d5a1" stroke-width="2.2"/><path d="M9 3.6V20.4M15.4 3.6V13M9 13H20.4M15.4 8.2H20.4" stroke="#e7d5a1" stroke-width="2.2" fill="none"/></svg></span> Token Burn Tracker</span>
     <span class="sp"></span>
     <a class="link" href="#features">Features</a>
     <a class="link" href="#run">Run it</a>
@@ -143,30 +152,7 @@
     <div class="meta"><b>macOS</b> · <b>Python 3</b> · open source (<b>MIT</b>) · v1.0.0</div>
 
     <div class="preview">
-      <div class="window">
-        <div class="titlebar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="addr">localhost:8799</span></div>
-        <div class="screen">
-          <div class="pcards">
-            <div class="pcard accent"><div class="k">Today</div><div class="v">640.7M</div></div>
-            <div class="pcard"><div class="k">This week</div><div class="v">4.37B</div></div>
-            <div class="pcard"><div class="k">This month</div><div class="v">9.62B</div></div>
-            <div class="pcard"><div class="k">All time</div><div class="v">15.6B</div></div>
-          </div>
-          <div class="strip">
-            <div class="lstat fire"><div class="k">Burning now</div><div class="v">2.5M/min</div></div>
-            <div class="lstat"><div class="k">AI CPU</div><div class="v">1.8%</div></div>
-            <div class="lstat"><div class="k">AI memory</div><div class="v">574 MB</div></div>
-            <div class="lstat"><div class="k">System memory</div><div class="v">13.2 GB</div></div>
-          </div>
-          <div class="bars">
-            <div class="lbl">Where your tokens go — top projects</div>
-            <div class="brow"><span class="nm">cowork sessions</span><span class="track"><span class="fill" style="width:100%;background:var(--cowork)"></span></span><span class="bv">12.5B</span></div>
-            <div class="brow"><span class="nm">atlas / backend</span><span class="track"><span class="fill" style="width:42%;background:var(--claude)"></span></span><span class="bv">979M</span></div>
-            <div class="brow"><span class="nm">options-swing</span><span class="track"><span class="fill" style="width:24%;background:var(--codex)"></span></span><span class="bv">456M</span></div>
-            <div class="brow"><span class="nm">video-labels</span><span class="track"><span class="fill" style="width:11%;background:var(--claude)"></span></span><span class="bv">341M</span></div>
-          </div>
-        </div>
-      </div>
+      <img class="shot" src="screenshot.png" alt="The Token Burn dashboard running locally on a Mac" loading="lazy" />
     </div>
   </div>
 </header>
