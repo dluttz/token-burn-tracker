@@ -19,9 +19,31 @@ for i in $(seq 1 90); do
   sleep 1
 done
 
-# Install Übersicht if missing (it should already be there from the AI Feed widget)
+# Ensure Übersicht is installed (the desktop widget runs inside it).
 if [ ! -d "/Applications/Übersicht.app" ]; then
-  echo "Installing Übersicht…"; brew install --cask ubersicht 2>&1 | tail -3
+  if command -v brew >/dev/null 2>&1; then
+    echo "Übersicht not found — installing it with Homebrew…"
+    brew install --cask ubersicht 2>&1 | tail -3
+  fi
+  # Re-check: Homebrew may be absent, or the brew install may have failed.
+  if [ ! -d "/Applications/Übersicht.app" ]; then
+    echo ""
+    echo "──────────────────────────────────────────────────────────────"
+    echo "  Übersicht isn't installed, and Homebrew isn't available to"
+    echo "  install it automatically."
+    echo ""
+    echo "  The desktop widget needs the free Übersicht app:"
+    echo "    1. Download it (free):  https://tracesof.net/uebersicht/"
+    echo "    2. Open the .dmg and drag Übersicht into Applications"
+    echo "    3. Launch Übersicht once (a menu-bar icon appears)"
+    echo "    4. Re-run this installer (install-widget.command)"
+    echo ""
+    echo "  Note: the full dashboard already works without the widget —"
+    echo "  just open  http://localhost:8799  in your browser."
+    echo "──────────────────────────────────────────────────────────────"
+    echo "You can close this window."
+    exit 1
+  fi
 fi
 
 WID="$HOME/Library/Application Support/Übersicht/widgets/token-burn.widget"
