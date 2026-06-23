@@ -24,13 +24,20 @@ def session_key(tool, sid, path):
 
 HOME = os.path.expanduser("~")
 HERE = os.path.dirname(os.path.abspath(__file__))
-CACHE_FILE = os.path.join(HERE, ".cache.json")
+# Mutable files (cache, token, custom sources, theme) live in a writable data dir so the
+# app bundle's Resources can stay read-only. Falls back to HERE for plain folder installs.
+DATA_DIR = os.environ.get("TOKENBURN_DATA_DIR") or HERE
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+except Exception:
+    DATA_DIR = HERE
+CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
 CACHE_VERSION = 4
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
 # working across server restarts (fixes the "invalid token after restart" issue).
-TOKEN_FILE = os.path.join(HERE, ".fixtoken")
+TOKEN_FILE = os.path.join(DATA_DIR, ".fixtoken")
 def _init_token():
     try:
         t = open(TOKEN_FILE).read().strip()
@@ -182,7 +189,7 @@ def load_codex_index():
     return m
 
 # ---------- custom (user-added) sources ----------
-CUSTOM_FILE = os.path.join(HERE, "custom_sources.json")
+CUSTOM_FILE = os.path.join(DATA_DIR, "custom_sources.json")
 BASE_TOOL_COLORS = {"Claude Code": "#d4663a", "Cowork": "#6e56cf", "Codex": "#10a37f", "Ollama": "#0ea5e9"}
 _PALETTE = ["#e08a2b", "#db2777", "#65a30d", "#7c3aed", "#0891b2", "#b45309", "#be123c"]
 
@@ -1415,7 +1422,7 @@ def series(rng):
     return out
 
 # ---------- server ----------
-THEME_FILE = os.path.join(HERE, "theme.json")
+THEME_FILE = os.path.join(DATA_DIR, "theme.json")
 def _is_hex(a):
     return isinstance(a, str) and len(a) == 7 and a[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in a[1:])
 def load_theme():

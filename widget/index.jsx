@@ -8,7 +8,7 @@ DIR="__TRACKER_DIR__"
 PY="$(command -v python3 || echo /usr/bin/python3)"
 OUT="$(curl -s --max-time 2 http://localhost:8799/api/summary 2>/dev/null)"
 if [ -z "$OUT" ]; then
-  ( cd "$DIR" && nohup "$PY" tracker.py >/dev/null 2>&1 & )
+  ( cd "$DIR" && TOKENBURN_DATA_DIR="$HOME/Library/Application Support/TokenBurnTracker" nohup "$PY" tracker.py >/dev/null 2>&1 & )
   OUT='{"loading":true}'
 fi
 echo "$OUT"
