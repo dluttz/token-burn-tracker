@@ -233,9 +233,7 @@
   @media(max-width:880px){ .sidebar{display:none} .wrap{margin:0 auto;padding:18px 18px 80px} }
 
   /* sticky frosted header */
-  .top{position:sticky;top:0;z-index:30;align-items:center;margin:0 0 6px;padding:20px 2px 16px;
-    background:linear-gradient(180deg,rgba(244,243,238,.96),rgba(244,243,238,.72));
-    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--rule)}
+  .top{position:static;align-items:center;margin:0 0 10px;padding:16px 2px 6px;background:transparent;border-bottom:none}
   h1{font-size:22px;font-weight:700;letter-spacing:-.025em}
   .sub{font-size:12.5px}
 
@@ -293,7 +291,7 @@
   html[data-theme="dark"] .sidebar .nav{color:#b8b4a9}
   html[data-theme="dark"] .sidebar .nav:hover{background:rgba(224,105,107,.13);color:#fff}
   html[data-theme="dark"] .sidebar .nav.on{background:#2f2d28;color:#fff}
-  html[data-theme="dark"] .top{background:linear-gradient(180deg,rgba(19,19,17,.96),rgba(19,19,17,.72));border-bottom-color:var(--rule)}
+  html[data-theme="dark"] .top{background:transparent;border-bottom:none}
   html[data-theme="dark"] .pcard,html[data-theme="dark"] .lstat{background:var(--panel)}
   html[data-theme="dark"] .pcard.accent{background:linear-gradient(180deg,#2a1517,#231619);border-color:#4a2729}
   html[data-theme="dark"] .chip,html[data-theme="dark"] .btn,html[data-theme="dark"] .rangebtns button,html[data-theme="dark"] .help{background:#232220;color:var(--ink)}
@@ -322,7 +320,7 @@
   html[data-theme="soft"] .sidebar .nav{color:#5d6371}
   html[data-theme="soft"] .sidebar .nav:hover{background:transparent;color:#41454d;box-shadow:var(--shadow-sm)}
   html[data-theme="soft"] .sidebar .nav.on{background:#e9ebf0;color:var(--accent);box-shadow:inset 3px 3px 7px #c6c9d3, inset -3px -3px 7px #fdffff}
-  html[data-theme="soft"] .top{background:#e9ebf0;border-bottom:none}
+  html[data-theme="soft"] .top{background:transparent;border-bottom:none}
   html[data-theme="soft"] .panel{background:#e9ebf0;border:none;box-shadow:var(--shadow)}
   html[data-theme="soft"] .pcard,html[data-theme="soft"] .pcard.accent,html[data-theme="soft"] .chip,html[data-theme="soft"] .btn,html[data-theme="soft"] .rangebtns,html[data-theme="soft"] .lstat,html[data-theme="soft"] .lstat.fire,html[data-theme="soft"] .help{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm)}
   html[data-theme="soft"] .rangebtns button{background:transparent}
@@ -345,6 +343,22 @@
   .addtoollink{display:inline-flex;align-items:center;gap:6px;margin:-2px 0 4px;border:none;background:transparent;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:4px 2px}
   .addtoollink:hover{text-decoration:underline}
   @media (max-width:640px){ .emptybanner{flex-direction:column;align-items:flex-start} .emptybanner .eb-btn{width:100%} }
+
+  /* calendar heat follows the chosen accent */
+  .cell.heat0,.sw.heat0{background:rgba(var(--accent-rgb),.06)}
+  .cell.heat1,.sw.heat1{background:rgba(var(--accent-rgb),.20)}
+  .cell.heat2,.sw.heat2{background:rgba(var(--accent-rgb),.45)}
+  .cell.heat3,.sw.heat3{background:rgba(var(--accent-rgb),.72)}
+  .cell.heat4,.sw.heat4{background:rgba(var(--accent-rgb),1)}
+  /* over-time chart hover (stock-style) */
+  #ts-svg{cursor:crosshair}
+  #ts-hover{pointer-events:none}
+  .ts-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.55}
+  .charttip{position:absolute;pointer-events:none;z-index:40;background:var(--panel);border:1px solid var(--rule);border-radius:9px;box-shadow:0 6px 22px rgba(0,0,0,.14);padding:8px 10px;font-size:12px;min-width:132px}
+  .charttip .cthd{font-weight:700;margin-bottom:5px;font-size:11.5px}
+  .charttip .ctrow{display:flex;align-items:center;gap:6px;margin:3px 0;white-space:nowrap}
+  .charttip .ctrow b{margin-left:auto;font-variant-numeric:tabular-nums}
+  .charttip .cdot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
 
   /* customize-layout control + modal */
   .customizebtn{display:flex;align-items:center;gap:11px;width:calc(100% - 0px);margin:6px 0 0;padding:9px 11px;border-radius:11px;border:none;background:transparent;color:#615e55;font:inherit;font-size:13.5px;font-weight:550;cursor:pointer;text-align:left}
@@ -493,11 +507,11 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
       <p class="cap">Tokens burned each day. Darker = more; today is outlined.</p>
       <div class="cal" id="cal"></div>
       <div class="callegend">Less
-        <span class="sw" style="background:#fafbf9"></span>
-        <span class="sw" style="background:#f3dcdc"></span>
-        <span class="sw" style="background:#e0a0a0"></span>
-        <span class="sw" style="background:#c2504f"></span>
-        <span class="sw" style="background:#9c2a2c"></span>
+        <span class="sw heat0"></span>
+        <span class="sw heat1"></span>
+        <span class="sw heat2"></span>
+        <span class="sw heat3"></span>
+        <span class="sw heat4"></span>
         More <span id="cal-month-total" style="margin-left:14px"></span></div>
     </div>
 
@@ -686,8 +700,7 @@ function renderCalendar(){
     const lvl = calLevel(tot);
     const cell = document.createElement("div");
     const isToday = ds===today;
-    cell.className = "cell"+(lvl>=3?" dark":"")+(isToday?" today":"")+(ds>today?" future":"");
-    cell.style.background = CAL_BG[lvl];
+    cell.className = "cell heat"+lvl+(lvl>=3?" dark":"")+(isToday?" today":"")+(ds>today?" future":"");
     cell.title = `${ds}: ${fmt(tot)} tokens`;
     cell.innerHTML = (isToday?`<span class="todaytag">TODAY</span>`:"")+`<span class="d">${dd}</span>`+(tot>0?`<span class="t">${fmt(tot)}</span>`:"");
     grid.appendChild(cell);
@@ -747,8 +760,46 @@ function drawSeries(data){
   $("#ts-legend").innerHTML=TOOLS.map(t=>`<span style="display:flex;gap:5px;align-items:center"><span class="dot" style="background:${t.c}"></span>${t.k}</span>`).join("");
   const rl={"1d":"last 24 hours","5d":"last 5 days","1m":"last 30 days","all":"all time"}[data.range]||"";
   cap.textContent=`Tokens per ${data.unit} · ${rl}${isLog?' · log scale':''} · updates live.`;
+  window.__chart={buckets,n,L,T,plotW,plotH,W,unit:data.unit,xAt,yAt,tools:TOOLS.slice()};
+  ensureChartHover();
 }
 document.getElementById("ts-range").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b&&b.dataset.r) loadSeries(b.dataset.r); });
+function chartFullLabel(ts,unit){
+  if(typeof ts==='string' && /^\d{4}-\d{2}-\d{2}/.test(ts)){
+    const p=ts.slice(0,10).split('-').map(Number);
+    const mn=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][p[1]-1];
+    let s=`${mn} ${p[2]}, ${p[0]}`;
+    if(unit==='hour' && ts.length>=13) s+=` · ${ts.slice(11,13)}:00`;
+    return s;
+  }
+  return String(ts);
+}
+function ensureChartHover(){
+  const svg=$("#ts-svg"); if(!svg || svg.__hov) return; svg.__hov=1;
+  const host=svg.parentNode; host.style.position='relative';
+  const tip=document.createElement('div'); tip.className='charttip'; tip.style.display='none'; host.appendChild(tip);
+  const NS='http://www.w3.org/2000/svg';
+  const clear=()=>{ const g=svg.querySelector('#ts-hover'); if(g)g.remove(); tip.style.display='none'; };
+  svg.addEventListener('mouseleave',clear);
+  svg.addEventListener('mousemove',e=>{
+    const C=window.__chart; if(!C||!C.n){clear();return;}
+    const rect=svg.getBoundingClientRect(); const sx=(e.clientX-rect.left)/rect.width*C.W;
+    if(sx<C.L-6 || sx>C.L+C.plotW+6){clear();return;}
+    let i=C.n<=1?0:Math.round((sx-C.L)/C.plotW*(C.n-1)); i=Math.max(0,Math.min(C.n-1,i));
+    const b=C.buckets[i]||{}; const x=C.xAt(i);
+    let g=svg.querySelector('#ts-hover'); if(g){g.innerHTML='';} else {g=document.createElementNS(NS,'g');g.id='ts-hover';svg.appendChild(g);}
+    const ln=document.createElementNS(NS,'line'); ln.setAttribute('x1',x);ln.setAttribute('x2',x);ln.setAttribute('y1',C.T);ln.setAttribute('y2',C.T+C.plotH);ln.setAttribute('class','ts-cross'); g.appendChild(ln);
+    let rows='';
+    C.tools.forEach(t=>{ const v=(b.tools||{})[t.k]||0; if(v>0){ const cy=C.yAt(v);
+      const c=document.createElementNS(NS,'circle'); c.setAttribute('cx',x);c.setAttribute('cy',cy);c.setAttribute('r','3.4');c.setAttribute('fill',t.c);c.setAttribute('stroke','#fff');c.setAttribute('stroke-width','1.5'); g.appendChild(c);
+      rows+=`<div class="ctrow"><span class="cdot" style="background:${t.c}"></span>${t.k}<b>${fmt(v)}</b></div>`; }});
+    tip.innerHTML=`<div class="cthd">${chartFullLabel(b.ts,C.unit)}</div>`+(rows||'<div class="ctrow" style="color:var(--muted)">No usage</div>');
+    tip.style.display='block';
+    const hr=host.getBoundingClientRect(); let lx=e.clientX-hr.left+14, ly=e.clientY-hr.top+8;
+    if(lx+tip.offsetWidth>hr.width) lx=e.clientX-hr.left-tip.offsetWidth-14; if(lx<0)lx=4;
+    tip.style.left=lx+'px'; tip.style.top=ly+'px';
+  });
+}
 
 function renderProjects(byProject){
   const el=$("#projects"); el.innerHTML="";
