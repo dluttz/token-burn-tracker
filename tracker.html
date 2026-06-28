@@ -333,6 +333,19 @@
   html[data-theme="soft"] .themeswitch{background:#e9ebf0;box-shadow:inset 3px 3px 7px #c6c9d3,inset -3px -3px 7px #fdffff}
   html[data-theme="soft"] .themeswitch button.on{background:#e9ebf0;color:var(--accent);box-shadow:3px 3px 7px #c6c9d3,-3px -3px 7px #fdffff}
 
+  /* empty-state banner + add-your-own-AI affordance */
+  .emptybanner{display:flex;align-items:center;gap:15px;background:linear-gradient(180deg,rgba(var(--accent-rgb),.06),rgba(var(--accent-rgb),.02));border:1px solid rgba(var(--accent-rgb),.22);border-radius:14px;padding:15px 17px;margin:0 0 8px}
+  .emptybanner.hidden{display:none}
+  .emptybanner .eb-ic{width:40px;height:40px;flex:none;border-radius:11px;background:rgba(var(--accent-rgb),.12);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .emptybanner .eb-tx{flex:1;min-width:0}
+  .emptybanner .eb-h{font-weight:700;font-size:15px;margin-bottom:2px}
+  .emptybanner .eb-p{color:var(--muted);font-size:13.5px;line-height:1.5}
+  .emptybanner .eb-btn{flex:none;border:none;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:650;font-size:13.5px;padding:10px 15px;cursor:pointer;white-space:nowrap}
+  .emptybanner .eb-btn:hover{filter:brightness(1.07)}
+  .addtoollink{display:inline-flex;align-items:center;gap:6px;margin:-2px 0 4px;border:none;background:transparent;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:4px 2px}
+  .addtoollink:hover{text-decoration:underline}
+  @media (max-width:640px){ .emptybanner{flex-direction:column;align-items:flex-start} .emptybanner .eb-btn{width:100%} }
+
   /* customize-layout control + modal */
   .customizebtn{display:flex;align-items:center;gap:11px;width:calc(100% - 0px);margin:6px 0 0;padding:9px 11px;border-radius:11px;border:none;background:transparent;color:#615e55;font:inherit;font-size:13.5px;font-weight:550;cursor:pointer;text-align:left}
   .customizebtn svg{width:17px;height:17px;opacity:.78;flex:none}
@@ -440,6 +453,15 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
       <div class="pcard"><div class="k">All-time</div><div class="v" id="p-all">—</div></div>
     </div>
     <div class="chips" id="tools"></div>
+    <button class="addtoollink" id="add-tool-top">+ Add another AI tool to track</button>
+    <div id="empty-banner" class="emptybanner hidden">
+      <span class="eb-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg></span>
+      <div class="eb-tx">
+        <div class="eb-h">No token usage found yet</div>
+        <div class="eb-p">As you use <b>Claude Code</b>, <b>Cowork</b>, or <b>Codex</b> on this Mac, your activity appears here automatically — nothing to set up. Using a different AI tool? Add it to count its tokens too.</div>
+      </div>
+      <button class="eb-btn" id="empty-add">Add your own AI tool</button>
+    </div>
     <div id="warnings"></div>
 
     <div class="panel">
@@ -629,6 +651,7 @@ function render(d){
   $("#p-month").textContent=fmt(pMonth);
   $("#p-year").textContent=fmt(pYear);
   $("#p-all").textContent=fmt(d.grand);
+  const _eb=$("#empty-banner"); if(_eb) _eb.classList.toggle("hidden",(d.grand||0)>0);
 
   $("#tools").innerHTML = TOOLS.filter(t=>d.byTool&&d.byTool[t.k]).map(t=>
     `<span class="chip"><span class="dot" style="background:${t.c}"></span>${t.k}: <b>${fmt(d.byTool[t.k])}</b></span>`).join("");
@@ -867,6 +890,9 @@ function renderInsights(ins){
     }).join("")
       : '<div class="wnote">✓ Nothing flagged — no background AI automations or login agents are burning tokens unattended.</div>'; }
 }
+// ---- jump to the "add a tool" form (from the empty-state banner or the top link) ----
+function goAddTool(){ const el=$("#src-name"); if(!el) return; const p=(el.closest&&el.closest('.panel'))||el; p.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>{try{el.focus();}catch(e){}},420); }
+document.addEventListener('click',e=>{ const t=e.target.closest&&e.target.closest('#empty-add,#add-tool-top'); if(t){ e.preventDefault(); goAddTool(); } });
 // ---- tracked tools (custom sources) ----
 function renderSources(d){
   const el=$("#sources"); if(!el) return;
