@@ -66,6 +66,11 @@
   .btn:hover{transform:translateY(-1px)}
   .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; border-color:transparent;
     box-shadow:0 6px 18px rgba(156,42,44,.32)}
+  .cmd{display:flex; align-items:center; gap:10px; max-width:740px; margin:0 auto 26px; background:#0f1115; color:#e8e6df;
+    border-radius:12px; padding:13px 15px; box-shadow:var(--shadow-sm); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; overflow:auto}
+  .cmd code{flex:1; white-space:nowrap}
+  .cmd button{flex:none; border:none; background:var(--accent); color:#fff; font:inherit; font-weight:650; font-size:12px; padding:7px 12px; border-radius:8px; cursor:pointer}
+  .cmd button:hover{filter:brightness(1.08)}
 
   /* hero */
   header.hero{padding:72px 0 30px; text-align:center}
@@ -156,7 +161,7 @@
     <a class="link" href="#features">Features</a>
     <a class="link" href="#run">Run it</a>
     <a class="link" href="https://github.com/dluttz/token-burn-tracker">GitHub</a>
-    <a class="btn primary" href="token-burn-tracker.zip">Download</a>
+    <a class="btn primary" href="#run">Get it</a>
   </div>
 </nav>
 
@@ -166,7 +171,7 @@
     <h1>See where your AI tokens actually go.</h1>
     <p class="sub">A private dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live, on your own machine. No account, no cloud, no telemetry.</p>
     <div class="cta">
-      <a class="btn primary" href="token-burn-tracker.zip">↓ Download for macOS</a>
+      <a class="btn primary" href="#run">↓ Run it free</a>
       <a class="btn" href="https://github.com/dluttz/token-burn-tracker">View source on GitHub</a>
     </div>
     <div class="meta"><b>macOS</b> · <b>Python 3</b> · open source (<b>MIT</b>) · v1.0.0</div>
@@ -204,13 +209,15 @@
 
 <section id="run">
   <div class="wrap">
-    <h2>Running in two minutes</h2>
-    <p class="lead">One app, one click. No setup or config — just Python 3, which most Macs already have (and the app helps you get it if you don't).</p>
+    <h2>Run it in one command</h2>
+    <p class="lead">No app to get blocked, no developer fees — it runs from your Terminal and stays 100% on your Mac. You just need Python 3, which most Macs already have.</p>
+    <div class="cmd"><code id="installcmd">curl -fsSL https://dluttz.github.io/token-burn-tracker/install.sh | bash</code><button onclick="navigator.clipboard.writeText(document.getElementById('installcmd').textContent);this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button></div>
     <div class="steps">
-      <div class="step"><h3>Download &amp; unzip</h3><p>You get a single <b>Token Burn Tracker</b> app — no folder of files to dig through.</p></div>
-      <div class="step"><h3>Right-click → Open</h3><p>The first time only, right-click the app and choose <b>Open</b> to clear macOS's "unidentified developer" warning. After that, a normal double-click works.</p></div>
-      <div class="step"><h3>That's it</h3><p>One click starts the local server, opens the dashboard at <code>localhost:8799</code>, and adds the desktop widget.</p></div>
+      <div class="step"><h3>Paste &amp; run</h3><p>Open <b>Terminal</b> (press ⌘-Space, type "Terminal"), paste the command above, and press Return.</p></div>
+      <div class="step"><h3>Dashboard opens</h3><p>It downloads the files, starts the local server, and opens <code>localhost:8799</code> in your browser. Nothing leaves your machine.</p></div>
+      <div class="step"><h3>Desktop widget</h3><p>If you have the free <a href="https://tracesof.net/uebersicht">Übersicht</a> app, the widget is added automatically. No Übersicht yet? Install it and run the command again.</p></div>
     </div>
+    <p class="lead" style="margin-top:18px; font-size:14px">Cautious about piped scripts? <a href="install.sh" style="color:var(--accent);font-weight:600">Read it first</a>. Prefer a clickable app? <a href="token-burn-tracker.zip" style="color:var(--accent);font-weight:600">Download the app</a> — on first open use <b>System Settings → Privacy &amp; Security → Open Anyway</b>.</p>
   </div>
 </section>
 
@@ -230,7 +237,7 @@
 
 <footer>
   <div class="wrap">
-    <a class="btn primary" href="token-burn-tracker.zip">↓ Download for macOS</a>
+    <a class="btn primary" href="#run">↓ Run it free</a>
     &nbsp; <a class="btn" href="https://github.com/dluttz/token-burn-tracker">GitHub repo</a>
     <div class="small" style="margin-top:18px">MIT License · © 2026 Daniel Lutts · v1.0.0 · requires macOS &amp; Python 3</div>
     <div class="small">Works with Claude Code, Cowork, and Codex. Not affiliated with or endorsed by Anthropic or OpenAI; trademarks belong to their respective owners.</div>
