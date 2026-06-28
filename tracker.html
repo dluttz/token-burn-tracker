@@ -765,14 +765,12 @@ function drawSeries(data){
 }
 document.getElementById("ts-range").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b&&b.dataset.r) loadSeries(b.dataset.r); });
 function chartFullLabel(ts,unit){
-  if(typeof ts==='string' && /^\d{4}-\d{2}-\d{2}/.test(ts)){
-    const p=ts.slice(0,10).split('-').map(Number);
-    const mn=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][p[1]-1];
-    let s=`${mn} ${p[2]}, ${p[0]}`;
-    if(unit==='hour' && ts.length>=13) s+=` · ${ts.slice(11,13)}:00`;
-    return s;
-  }
-  return String(ts);
+  const d=new Date(ts);
+  if(isNaN(d.getTime())) return String(ts);
+  const mn=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+  let s=`${mn} ${d.getDate()}, ${d.getFullYear()}`;
+  if(unit==='hour') s+=` · ${String(d.getHours()).padStart(2,'0')}:00`;
+  return s;
 }
 function ensureChartHover(){
   const svg=$("#ts-svg"); if(!svg || svg.__hov) return; svg.__hov=1;
