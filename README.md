@@ -37,23 +37,28 @@ add other tools yourself.
 
 ## Install & run
 
-1. **Download** this folder and unzip it **anywhere** (Desktop, Downloads, etc.).
-   It figures out its own location, so it doesn't matter where you put it.
+**One command (recommended).** Paste this into Terminal and press Return:
 
-2. **First run — clear the macOS block.** Because the files came from the internet,
-   macOS may say *"cannot verify the developer."* Either:
-   - **Right-click `install.command` → Open → Open**, or
-   - run `install.command`, which clears the quarantine flag for the whole folder,
-     checks for Python 3, and starts the dashboard for you.
+```bash
+curl -fsSL https://dluttz.github.io/token-burn-tracker/install.sh | bash
+```
 
-3. **Everyday use:**
-   - `start.command` — runs the dashboard in a visible window (close it to quit).
-   - `run-in-background.command` — keeps running after you close the window.
-   - `stop.command` — stops it.
+It downloads the latest files into `~/.token-burn-tracker`, starts the local
+dashboard, opens **http://localhost:8799**, and — if you have Übersicht — adds the
+desktop widget. Because it runs from Terminal, there's **no macOS "unverified
+developer" prompt**, and nothing leaves your Mac.
 
-4. Open **http://localhost:8799** (the launchers open it for you).
+**Everyday use afterwards:**
+
+- **Restart:** `( cd ~/.token-burn-tracker && python3 tracker.py & ) ; open http://localhost:8799`
+- **Stop:** `pkill -f tracker.py`
+- **Update:** run the install command again (it always pulls the latest).
 
 > Change the port with the `TRACKER_PORT` environment variable (default `8799`).
+
+**Prefer a clickable app?** Download the [app build](https://dluttz.github.io/token-burn-tracker/token-burn-tracker.zip);
+on first open use **System Settings → Privacy & Security → Open Anyway** (it's
+unsigned, so macOS asks once).
 
 ---
 
@@ -71,7 +76,7 @@ where tokens went. **All of this is rendered locally in your browser.**
 - **The server makes no outbound network calls.** The only network traffic is your
   browser talking to `localhost`. Nothing is uploaded anywhere.
 - A small cache (`.cache.json`) and a per-install action token (`.fixtoken`) live in
-  this folder. They are **git-ignored** so you never publish your own prompts or token.
+  `~/.token-burn-tracker` (or next to `tracker.py` for the app build) — never published.
 
 ---
 
@@ -106,27 +111,31 @@ in `custom_sources.json`, which is git-ignored.)
 
 ## Desktop widget (optional)
 
-`install-widget.command` installs an Übersicht "Token Burn" card that shows today's
-burn at a glance and keeps the server alive. It bakes the correct folder path in at
-install time, so it works no matter where you unzipped the app.
+If you have the free [Übersicht](https://tracesof.net/uebersicht) app, the install
+command adds a "Token Burn" desktop card automatically. Don't have Übersicht yet?
+Install it, then run the install command again to add the widget.
 
 ---
 
 ## Uninstall
 
-- `uninstall.command` — stops the server, removes the Übersicht widget, and moves this
-  folder's cache + token to the Trash (reversible, and it asks first). It does **not**
-  delete your AI logs.
-- To remove the app entirely, drag this folder to the Trash afterward.
+```bash
+pkill -f tracker.py
+rm -rf ~/.token-burn-tracker
+```
+
+Then delete the `token-burn` widget from Übersicht's widgets folder if you added it.
+Your AI logs are never touched.
 
 ---
 
 ## Troubleshooting
 
-- **"macOS cannot verify the developer."** Right-click the `.command` → **Open**, or
-  run `install.command` once to clear it for the whole folder.
+- **"macOS cannot verify the developer."** Only happens with the downloadable app —
+  use **System Settings → Privacy & Security → Open Anyway**. The one-command install
+  avoids this entirely.
 - **"python3: command not found."** Run `xcode-select --install`, then try again.
-- **Port already in use.** Set a different port: `TRACKER_PORT=8800 ./start.command`.
+- **Port already in use.** Set a different port: `TRACKER_PORT=8800 python3 tracker.py`.
   (The launchers only ever stop *this* tool's own server — they won't kill an
   unrelated service that happens to use the port.)
 - **A tool shows zero.** If a vendor changes their log format, the dashboard shows a
