@@ -118,6 +118,18 @@
   .asub .sa{display:flex;gap:7px;font-size:12.5px;margin-top:5px;line-height:1.45}
   .asub .sa .saty{flex:none;color:var(--cowork);font-weight:700}
   .afeed{margin-top:10px;font-size:12px;color:#6b6a63;line-height:1.7}
+  /* collapsed-by-default agent rows: click .ahead to expand .adetail */
+  .arun{padding:0;cursor:pointer}
+  .arun .ahead{padding:13px 15px;gap:9px}
+  .arun .ahead:hover{background:rgba(var(--accent-rgb),0.04)}
+  .arun.open .ahead{border-bottom:1px solid var(--rule)}
+  .achev{flex:none;width:16px;height:16px;color:var(--muted);transition:transform .15s;display:flex;align-items:center;justify-content:center}
+  .arun.open .achev{transform:rotate(90deg);color:var(--accent)}
+  .asummary{display:flex;align-items:center;gap:5px;margin-left:auto;flex:none}
+  .acount{display:flex;align-items:center;gap:3px;font-size:11.5px;color:var(--muted);border:1px solid var(--rule);border-radius:20px;padding:2px 9px;background:#fafbf9;font-variant-numeric:tabular-nums;cursor:help;white-space:nowrap}
+  .acount b{font-weight:650;color:var(--ink)}
+  .adetail{display:none;padding:12px 15px 14px;cursor:default}
+  .arun.open .adetail{display:block}
   .anote{color:var(--muted);font-size:13px;padding:10px 0}
   .livenote{color:var(--muted);font-size:13px;padding:10px 0}
   .idlerow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;margin-top:12px;padding-top:11px;border-top:1px dashed var(--rule)}
@@ -156,6 +168,16 @@
   .promptguide table{font-size:12.5px}
   .promptguide td,.promptguide th{padding:9px 12px}
   .promptguide tr:last-child td{border-bottom:none}
+
+  /* token breakdown */
+  .tbrows{display:flex;flex-direction:column;gap:12px}
+  .tbrow .tblabel{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:600;margin-bottom:5px}
+  .tbrow .tbpct{color:var(--muted);font-weight:500;font-size:12px}
+  .tbrow .tbval{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:650}
+  .tbtrack{height:14px;border-radius:7px;background:#f0eee6;overflow:hidden}
+  .tbfill{height:100%;background:var(--accent);border-radius:7px 0 0 7px;transition:width .3s}
+  .tbtip{margin-top:14px;display:flex;gap:10px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.5}
+  .tbtip .tbtag{flex:none;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
 
   /* waste */
   .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:11px;padding:13px 15px;margin:10px 0}
@@ -488,9 +510,9 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel">
-      <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running, this shows what it's actually doing inside: which tools it's using and how often, code changes it made, and any helper 'sub-agents' it started. It's the detail a normal usage number can't show you.">?</span></h2>
+      <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running, this shows what it's actually doing inside: which tools it's using and how often, code changes it made, and any helper 'sub-agents' it started. Hover a count for what it means; click a row to see the full detail.">?</span></h2>
         <span id="agents-at" style="margin-left:auto;color:var(--muted);font-size:12px"></span></div>
-      <p class="cap">What each agent run is actually doing <i>inside</i> — the tools it's touching, code patches, reasoning steps, and any sub-agents it spawned. The unit here is the <b>run</b>, not the session — the part a normal dashboard can't see. Live.</p>
+      <p class="cap">Each row is one agent <b>run</b>. Hover a count to see what it means; click a row to expand tools touched, code patches, and any sub-agents it spawned. Live.</p>
       <div id="agents"><div class="livenote">Checking…</div></div>
     </div>
 
@@ -546,20 +568,26 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
 
     <div class="panel">
       <h2>Where you can become more efficient <span class="help" data-tip="Habits you can change to use fewer tokens, based on your own heaviest chats and folders — plus a guide for which tool to use for which kind of task. These are things to do differently, not things to delete.">?</span></h2>
-      <p class="cap">How to <b>change the way you work</b> to burn fewer tokens — your heaviest chats and folders, plus a guide to which tool to reach for and how to prompt it. (Background jobs to switch off are in “suggested to remove” below.)</p>
+      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders — plus a quick guide to the right tool for the job. <i>(Background jobs to switch off live in “suggested to remove” below.)</i></p>
       <div class="sugs" id="suggestions"></div>
       <div class="promptguide">
         <table>
           <thead><tr><th>When you want to…</th><th>Use</th><th>Prompt it like</th></tr></thead>
           <tbody>
-            <tr><td>A quick fact, summary, or rename</td><td>A small/fast model (Haiku, GPT-mini)</td><td>“In one line: …” — keep it short, give no extra context.</td></tr>
-            <tr><td>Focused code edits in one repo</td><td>Codex</td><td>Point it at the exact file/function and describe the change precisely.</td></tr>
-            <tr><td>Multi-file work, refactors, research</td><td>Claude Code / Cowork</td><td>State the goal + constraints once, then let it plan and use sub-agents.</td></tr>
-            <tr><td>Deep reasoning or tricky design</td><td>Opus — sparingly</td><td>Give full context once; ask for a plan before any code.</td></tr>
-            <tr><td>A session that's getting expensive</td><td>/compact or a fresh thread</td><td>Summarize what's done, start clean — stops re-reading old context every turn.</td></tr>
+            <tr><td>A quick fact or rename</td><td>A small/fast model (Haiku, GPT-mini)</td><td>“In one line: …” — short, no extra context.</td></tr>
+            <tr><td>Focused edits in one repo</td><td>Codex</td><td>Name the exact file/function + the change.</td></tr>
+            <tr><td>Multi-file work or research</td><td>Claude Code / Cowork</td><td>State the goal once; let it plan with sub-agents.</td></tr>
+            <tr><td>Deep reasoning or design</td><td>Opus — sparingly</td><td>Full context once; ask for a plan first.</td></tr>
+            <tr><td>A thread getting expensive</td><td>/compact or a fresh thread</td><td>Summarize progress, start clean.</td></tr>
           </tbody>
         </table>
       </div>
+    </div>
+
+    <div class="panel">
+      <h2>Token breakdown <span class="help" data-tip="Every token you've used, split into the four kinds Claude/Codex bill separately: new input you typed or pasted, cache write (context saved for reuse), cache read (that saved context being re-sent), and output the model generated. The mix tells you where to cut.">?</span></h2>
+      <p class="cap">Where your tokens actually go — input, cache, and output — with a suggestion based on your own mix.</p>
+      <div id="token-breakdown"></div>
     </div>
 
     <div class="panel">
@@ -679,6 +707,7 @@ function render(d){
   renderWhy(d.bySession||[]);
   renderTop10(d.days||[]);
   renderInsights(d.insights);
+  renderTokenBreakdown(d.tokenBreakdown);
   $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; nothing leaves your Mac.`;
 }
 
@@ -831,6 +860,47 @@ function renderTop10(days){
   });
 }
 
+// ---- token breakdown (input / cache write / cache read / output) ----
+function renderTokenBreakdown(bd){
+  const el=$("#token-breakdown"); if(!el) return;
+  bd=bd||{};
+  const cats=[
+    {k:"input",       label:"Input",       tip:"New tokens you sent — typed prompts and pasted content — that weren't already cached."},
+    {k:"cache_read",  label:"Cache read",  tip:"Previously-saved context being re-sent to the model on this turn. Grows with longer threads."},
+    {k:"cache_write", label:"Cache write", tip:"Context newly saved to the cache so it can be reused (and read cheaply) on later turns."},
+    {k:"output",      label:"Output",      tip:"Tokens the model generated back to you — its replies, code, and explanations."},
+  ];
+  const total = cats.reduce((s,c)=>s+(+bd[c.k]||0),0);
+  if(total<=0){
+    el.innerHTML = '<div class="livenote">No token usage parsed yet — the breakdown fills in once your logs have data.</div>';
+    return;
+  }
+  const rows = cats.map(c=>{
+    const v = +bd[c.k]||0, pct = total>0 ? (v/total*100) : 0;
+    return `<div class="tbrow">`+
+      `<div class="tblabel"><span title="${esc(c.tip)}">${esc(c.label)}</span><span class="tbpct">${pct.toFixed(1)}%</span><span class="tbval">${fmt(v)}</span></div>`+
+      `<div class="tbtrack" title="${esc(c.label)}: ${fmt(v)} tokens (${pct.toFixed(1)}%)"><div class="tbfill" style="width:${Math.max(pct,v>0?0.6:0).toFixed(1)}%"></div></div>`+
+      `</div>`;
+  }).join("");
+  // pick whichever category is the largest share and show a matching, data-driven tip
+  const top = cats.reduce((a,c)=> (+bd[c.k]||0) > (+bd[a.k]||0) ? c : a, cats[0]);
+  const topPct = total>0 ? ((+bd[top.k]||0)/total*100) : 0;
+  let tip;
+  if(top.k==="cache_read" && topPct>=30){
+    tip = "Most of your tokens are cached context being re-read — shorten threads or run /compact so you stop re-sending the same history every turn.";
+  } else if(top.k==="output" && topPct>=40){
+    tip = "Output tokens dominate — ask for terser answers, smaller diffs, or “just the change” instead of full re-explanations.";
+  } else if(top.k==="input" && topPct>=40){
+    tip = "Big prompts are driving your usage — trim pasted context down to what's relevant and be specific instead of pasting whole files.";
+  } else if(top.k==="cache_write" && topPct>=30){
+    tip = "You're writing a lot of new context to the cache — that's normal for long or file-heavy sessions, but wrapping up finished threads keeps it from compounding.";
+  } else {
+    tip = "Your usage is fairly evenly spread across input, cache, and output — no single habit is driving the total.";
+  }
+  el.innerHTML = `<div class="tbrows">${rows}</div>`+
+    `<div class="tbtip"><span class="tbtag">Tip</span><div>${tip}</div></div>`;
+}
+
 // ---- running now (merged: chats + processes, one titled list) ----
 function renderLive(d){
   d=d||{};
@@ -880,12 +950,35 @@ function renderLive(d){
 async function pollLive(){ try{ renderLive(await (await fetch("/api/live")).json()); }catch(e){} }
 
 // ---- sub-agents & agent activity ----
+// Collapsed by default: each run is one summary line (title, tool, status, small hover-able
+// counts). Click a row to expand the full detail (tools touched, patches, sub-agents, feed).
+// Expand state persists across the 8s live poll, keyed by the run's log file path.
 function agoShort(s){ s=+s||0; return s<60?s+"s":(s<3600?Math.round(s/60)+"m":Math.round(s/3600)+"h"); }
+const AGENTS_OPEN = new Set();   // set of r.file keys currently expanded
+function runKey(r,i){ return r.file || (r.tool+'|'+r.title+'|'+i); }
+const SVG_CHEVRON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
 function renderAgents(runs){
   const el=$("#agents");
   if(!runs||!runs.length){ el.innerHTML='<div class="anote">No agent runs in the last 30 minutes. When you run Codex, Claude Code, or a Cowork task, its live activity — tools touched, code patches, and any sub-agents it spawns — appears here.</div>'; return; }
-  el.innerHTML=runs.map(r=>{
+  el.innerHTML=runs.map((r,i)=>{
+    const key=runKey(r,i);
+    const open=AGENTS_OPEN.has(key);
     const c=COLOR[r.tool]||"#999";
+    const nTools=(r.topTools||[]).length;
+    const nSub=(r.subagents||[]).length;
+
+    // ---- collapsed summary: title + small hover-tooltip'd counts ----
+    const summary=[];
+    if(r.toolCalls) summary.push(`<span class="acount" title="${r.toolCalls} tool call${r.toolCalls>1?'s':''} across ${nTools} distinct tool${nTools===1?'':'s'} — click to see which ones">⚙ <b>${r.toolCalls}</b></span>`);
+    if(r.patches) summary.push(`<span class="acount" title="${r.patches} code patch${r.patches>1?'es':''} applied by this run — click to see the timeline">✎ <b>${r.patches}</b></span>`);
+    if(nSub) summary.push(`<span class="acount" title="${nSub} sub-agent${nSub>1?'s':''} spawned by this run — click to see what each one did">▸ <b>${nSub}</b></span>`);
+    if(r.mcp) summary.push(`<span class="acount" title="${r.mcp} MCP tool call${r.mcp>1?'s':''} (external tool integrations)">⇄ <b>${r.mcp}</b></span>`);
+
+    const titleHtml = r.file
+      ? `<a class="atitle alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" title="Open this chat's full transcript in a new tab" onclick="event.stopPropagation()">${esc(r.title)} ↗</a>`
+      : `<span class="atitle" title="${esc(r.title)}">${esc(r.title)}</span>`;
+
+    // ---- expanded detail: unchanged from before, just hidden until opened ----
     const tools=(r.topTools||[]).map(([n,k])=>`<span class="achip"><b>${esc(n)}</b> ${k}</span>`).join("");
     const extra=[];
     if(r.toolCalls) extra.push(`<span class="achip">${r.toolCalls} tool call${r.toolCalls>1?'s':''}</span>`);
@@ -895,17 +988,27 @@ function renderAgents(runs){
     const subs=(r.subagents||[]).length ? `<div class="asub"><div class="salabel">Sub-agents (${r.subagents.length})</div>`+
        r.subagents.map(s=>`<div class="sa"><span class="saty">▸</span><span>${esc(s.desc||s.type||'sub-agent')}${s.type?` <span style="color:var(--muted)">(${esc(s.type)})</span>`:''}</span></div>`).join("")+`</div>` : "";
     const feed=(r.recent||[]).length ? `<div class="afeed">${r.recent.map(x=>esc(x)).join(" &nbsp;·&nbsp; ")}</div>` : "";
-    const titleHtml = r.file
-      ? `<a class="atitle alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" title="Open this chat's full transcript in a new tab">${esc(r.title)} ↗</a>`
-      : `<span class="atitle" title="${esc(r.title)}">${esc(r.title)}</span>`;
-    return `<div class="arun"><div class="ahead"><span class="dot" style="background:${c}"></span>`+
+
+    return `<div class="arun${open?' open':''}" data-key="${esc(key)}"><div class="ahead">`+
+      `<span class="achev">${SVG_CHEVRON}</span>`+
+      `<span class="dot" style="background:${c}" title="${esc(r.tool)}"></span>`+
       `${titleHtml}`+
       `<span class="livekind">${esc(r.tool)}</span>`+
-      `<span class="astatus ${esc(r.status)}">${esc(r.status)}</span>`+
-      `<span class="ameta">${agoShort(r.ago)} ago</span></div>`+
-      `<div class="achips">${tools}${extra.join("")}</div>${subs}${feed}</div>`;
+      `<span class="astatus ${esc(r.status)}" title="Run status: ${esc(r.status)}">${esc(r.status)}</span>`+
+      `<span class="ameta" title="Last activity ${agoShort(r.ago)} ago">${agoShort(r.ago)} ago</span>`+
+      `<span class="asummary">${summary.join("")}</span>`+
+      `</div>`+
+      `<div class="adetail"><div class="achips">${tools}${extra.join("")}</div>${subs}${feed}</div>`+
+      `</div>`;
   }).join("");
 }
+// one delegated listener handles clicks for every row, including ones added by later polls
+document.getElementById("agents").addEventListener("click", e=>{
+  const row=e.target.closest(".arun"); if(!row) return;
+  const key=row.dataset.key;
+  if(AGENTS_OPEN.has(key)){ AGENTS_OPEN.delete(key); row.classList.remove("open"); }
+  else { AGENTS_OPEN.add(key); row.classList.add("open"); }
+});
 async function pollAgents(){ try{ const d=await (await fetch("/api/agents")).json(); renderAgents(d.runs); }catch(e){} }
 
 // ---- efficiency (ranked) + waste (one-click fix) ----

@@ -74,7 +74,7 @@ def analytics_launch():
     except Exception:
         pass
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 4
+CACHE_VERSION = 5   # bumped: cache entries now also store a per-file token breakdown (input/cache/output)
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -126,8 +126,12 @@ def _ts_date(v):
         return None
 
 # ---------- parsers -> (entries[[date,tool,model,project,tokens,sessionKey]], titles{sk:title}) ----------
+def _empty_breakdown():
+    return {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+
 def claude_entries(path, tool, file_date):
     entries, titles = [], {}
+    tb = _empty_breakdown()   # input/cache/output split, summed across every usage record in this file
     last_ts = None
     default_cwd = "Cowork sessions" if tool == "Cowork" else "?"
     try:
@@ -158,6 +162,10 @@ def claude_entries(path, tool, file_date):
                       + (u.get("cache_read_input_tokens") or 0))
                 if tk <= 0:
                     continue
+                tb["input"] += u.get("input_tokens") or 0
+                tb["cache_write"] += u.get("cache_creation_input_tokens") or 0
+                tb["cache_read"] += u.get("cache_read_input_tokens") or 0
+                tb["output"] += u.get("output_tokens") or 0
                 # Claude Code uses "timestamp"; Cowork uses "_audit_timestamp".
                 ts = d.get("timestamp") or d.get("_audit_timestamp") or msg.get("timestamp")
                 if ts:
@@ -169,7 +177,7 @@ def claude_entries(path, tool, file_date):
                 entries.append([date, tool, msg.get("model") or "?", d.get("cwd") or default_cwd, tk, sk])
     except Exception:
         pass
-    return entries, titles
+    return entries, titles, tb
 
 def codex_entries(path, file_date, index_map):
     cwd = model = first_ts = sid = None
@@ -212,8 +220,11 @@ def codex_entries(path, file_date, index_map):
         sk = "Codex:" + (sid or os.path.basename(path))
         ents = [[dt, "Codex", model or "codex", cwd or "?", int(tok), sk]
                 for dt, tok in by_date.items() if tok > 0]
-        return ents, {sk: index_map.get(sid or "", "Codex session")}
-    return [], {}
+        # Codex's rollout logs only expose a cumulative total_tokens per event (no
+        # input/cache/output split), so its share of the token breakdown is left at 0 —
+        # same limitation as everywhere else this file reads Codex usage (see series/live-burn).
+        return ents, {sk: index_map.get(sid or "", "Codex session")}, _empty_breakdown()
+    return [], {}, _empty_breakdown()
 
 def load_codex_index():
     m = {}
@@ -297,7 +308,7 @@ def custom_entries(path, src, file_date):
     tkeys = set(src.get("tokenKeys") or [])
     tskeys = src.get("tsKeys") or ["timestamp", "_audit_timestamp", "created_at", "time", "ts"]
     if not tkeys:
-        return [], {}
+        return [], {}, _empty_breakdown()
     sk = name + ":" + os.path.basename(path)
     proj = shorten(os.path.dirname(path)) if "/" in path else name
     by_date = defaultdict(int)
@@ -319,7 +330,9 @@ def custom_entries(path, src, file_date):
     except Exception:
         pass
     ents = [[dt, name, src.get("model") or "?", proj, int(tok), sk] for dt, tok in by_date.items() if tok > 0]
-    return ents, ({sk: os.path.basename(path)} if ents else {})
+    # Custom sources only declare which field(s) hold a token count, not which kind
+    # (input/cache/output), so they don't contribute to the token breakdown split.
+    return ents, ({sk: os.path.basename(path)} if ents else {}), _empty_breakdown()
 
 # ---------- build ----------
 def _gather_files_uncached():
@@ -351,6 +364,7 @@ def build():
         STATE["parsed"] = 0
         newcache = {"_v": CACHE_VERSION}
         entries, titles, parsed = [], {}, 0
+        tokenBreakdown = _empty_breakdown()   # input/cache/output totals across every parsed record
         kind_files = defaultdict(int); kind_tokens = defaultdict(int)
         for kind, path in files:
             kind_files[kind] += 1
@@ -359,23 +373,25 @@ def build():
             except OSError:
                 continue
             c = cache.get(path)
-            if c and c.get("mtime") == mt:
-                ents, tts = c["entries"], c.get("titles", {})
+            if c and c.get("mtime") == mt and "tb" in c:
+                ents, tts, tb = c["entries"], c.get("titles", {}), c.get("tb", _empty_breakdown())
             else:
                 fdate = datetime.date.fromtimestamp(mt).isoformat()
                 if kind == "claude":
-                    ents, tts = claude_entries(path, "Claude Code", fdate)
+                    ents, tts, tb = claude_entries(path, "Claude Code", fdate)
                 elif kind == "cowork":
-                    ents, tts = claude_entries(path, "Cowork", fdate)
+                    ents, tts, tb = claude_entries(path, "Cowork", fdate)
                 else:
-                    ents, tts = codex_entries(path, fdate, index_map)
+                    ents, tts, tb = codex_entries(path, fdate, index_map)
                 parsed += 1
                 STATE["parsed"] = parsed
-            newcache[path] = {"mtime": mt, "entries": ents, "titles": tts}
+            newcache[path] = {"mtime": mt, "entries": ents, "titles": tts, "tb": tb}
             entries.extend(ents)
             kind_tokens[kind] += sum(e[4] for e in ents)
             for k, v in tts.items():
                 titles.setdefault(k, v)
+            for k in tokenBreakdown:
+                tokenBreakdown[k] += tb.get(k, 0)
         # user-added custom token sources (manual "add a tool to track")
         custom = load_custom_sources()
         custom_health = []
@@ -392,22 +408,25 @@ def build():
                     continue
                 ck = "custom::" + nm + "::" + path
                 c = cache.get(ck)
-                if c and c.get("mtime") == mt:
-                    ents, tts = c["entries"], c.get("titles", {})
+                if c and c.get("mtime") == mt and "tb" in c:
+                    ents, tts, tb = c["entries"], c.get("titles", {}), c.get("tb", _empty_breakdown())
                 else:
                     fdate = datetime.date.fromtimestamp(mt).isoformat()
-                    ents, tts = custom_entries(path, src, fdate)
+                    ents, tts, tb = custom_entries(path, src, fdate)
                     parsed += 1; STATE["parsed"] = parsed
-                newcache[ck] = {"mtime": mt, "entries": ents, "titles": tts}
+                newcache[ck] = {"mtime": mt, "entries": ents, "titles": tts, "tb": tb}
                 entries.extend(ents); ntok += sum(e[4] for e in ents)
                 for k, v in tts.items():
                     titles.setdefault(k, v)
+                for k in tokenBreakdown:
+                    tokenBreakdown[k] += tb.get(k, 0)
             custom_health.append((nm, nfiles, ntok))
         try:
             json.dump(newcache, open(CACHE_FILE, "w"))
         except Exception:
             pass
         d = aggregate(entries, titles)
+        d["tokenBreakdown"] = tokenBreakdown
         # self-check: a source with log files but zero parsed tokens likely means its format changed
         warn = []
         for k, nm in (("claude", "Claude Code"), ("cowork", "Cowork"), ("codex", "Codex")):
