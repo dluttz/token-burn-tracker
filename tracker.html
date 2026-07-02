@@ -376,6 +376,33 @@
   @media (max-width:640px){ .updatebanner{flex-wrap:wrap} .updatebanner .addtoollink{width:100%;justify-content:center} }
   @media (max-width:640px){ .emptybanner{flex-direction:column;align-items:flex-start} .emptybanner .eb-btn{width:100%} }
 
+  /* full-screen "update available" popup — a bigger, harder-to-miss version of .updatebanner.
+     Shown once per page session on load (if outdated), and again after a manual Rescan finds
+     a new version. Purely in-memory: no localStorage/sessionStorage involved. */
+  .um-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:22px}
+  .um-overlay.hidden{display:none}
+  .um-card{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:20px;box-shadow:0 30px 90px rgba(0,0,0,.4);width:min(520px,94vw);max-height:88vh;overflow:auto;padding:30px 30px 26px}
+  .um-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .um-icon{flex:none;width:44px;height:44px;border-radius:13px;background:rgba(var(--accent-rgb),.14);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .um-head h2{margin:0;font-size:23px;font-weight:750;letter-spacing:-.02em;color:var(--accent)}
+  .um-vers{font-size:14.5px;color:var(--ink);margin:14px 0 2px;line-height:1.5}
+  .um-vers b{font-variant-numeric:tabular-nums}
+  .um-sub{color:var(--muted);font-size:13px;margin:0 0 18px;line-height:1.5}
+  .um-cmdbox{background:rgba(var(--accent-rgb),.08);border:1px solid rgba(var(--accent-rgb),.22);border-radius:12px;padding:14px 16px;margin:0 0 18px}
+  .um-cmdbox code{display:block;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all;white-space:pre-wrap}
+  .um-copybtn{width:100%;border:none;border-radius:12px;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:15px;padding:14px 18px;cursor:pointer;box-shadow:0 10px 26px rgba(var(--accent-rgb),.32);transition:transform .12s,filter .12s}
+  .um-copybtn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .um-copybtn.copied{background:#2c7a3f;box-shadow:0 10px 26px rgba(44,122,63,.28)}
+  .um-copysub{text-align:center;font-size:12px;color:var(--muted);margin:8px 0 0;min-height:15px}
+  .um-steps{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 4px;font-size:12px;color:var(--muted)}
+  .um-steps span{background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:5px 9px}
+  .um-foot{display:flex;justify-content:center;margin-top:16px}
+  .um-later{border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:6px 10px}
+  .um-later:hover{color:var(--ink);text-decoration:underline}
+  html[data-theme="soft"] .um-card{box-shadow:var(--shadow)}
+  html[data-theme="soft"] .um-cmdbox{box-shadow:var(--shadow-sm)}
+  @media(max-width:520px){ .um-card{padding:22px 18px 20px} .um-head h2{font-size:20px} }
+
   /* calendar heat follows the chosen accent */
   .cell.heat0,.sw.heat0{background:rgba(var(--accent-rgb),.06)}
   .cell.heat1,.sw.heat1{background:rgba(var(--accent-rgb),.20)}
@@ -479,6 +506,21 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     <p class="modal-sub">Show, hide, and reorder the sections below. Saved on this computer.</p>
     <div id="layout-list"></div>
     <div class="modal-foot"><button class="btn" id="layout-reset">Reset to default</button></div>
+  </div>
+</div>
+<div class="um-overlay hidden" id="update-modal">
+  <div class="um-card">
+    <div class="um-head">
+      <span class="um-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>
+      <h2>Update available</h2>
+    </div>
+    <p class="um-vers" id="um-versline">You're on v<b id="um-current">—</b> — v<b id="um-latest">—</b> is now available.</p>
+    <p class="um-sub">What's new gets better every release.</p>
+    <div class="um-cmdbox"><code id="um-cmd"></code></div>
+    <button class="um-copybtn" id="um-copy">Copy update command</button>
+    <p class="um-copysub" id="um-copysub">Copies the install command to your clipboard.</p>
+    <div class="um-steps"><span>1) Open Terminal</span><span>2) Paste (⌘V)</span><span>3) Press Return</span></div>
+    <div class="um-foot"><button class="um-later" id="um-later">Later</button></div>
   </div>
 </div>
 <div class="wrap">
@@ -680,6 +722,41 @@ function renderUpdateBanner(u){
   if(dismissBtn) dismissBtn.addEventListener("click", ()=>{ UPDATE_DISMISSED=true; el.classList.add("hidden"); });
 })();
 
+// ---- full-screen "update available" popup — a bigger, hard-to-miss version of the banner
+// above. Shown once per page session on initial load (if outdated), and again whenever a
+// manual Rescan finds a newer version. Closing is in-memory only (no localStorage/sessionStorage) ----
+let UPDATE_MODAL_SHOWN = false;   // guards the once-per-session auto-show from render(d)
+function showUpdateModal(u){
+  if(!u || !u.outdated) return;
+  const ov=$("#update-modal"); if(!ov) return;
+  $("#um-current").textContent = u.current || "?";
+  $("#um-latest").textContent = u.latest || "?";
+  $("#um-cmd").textContent = u.cmd || "";
+  const copyBtn=$("#um-copy"), copySub=$("#um-copysub");
+  if(copyBtn){ copyBtn.classList.remove("copied"); copyBtn.textContent="Copy update command"; }
+  if(copySub) copySub.textContent="Copies the install command to your clipboard.";
+  ov.classList.remove("hidden");
+}
+function hideUpdateModal(){ const ov=$("#update-modal"); if(ov) ov.classList.add("hidden"); }
+(function(){
+  const ov=$("#update-modal"); if(!ov) return;
+  const copyBtn=$("#um-copy"), copySub=$("#um-copysub"), laterBtn=$("#um-later");
+  if(copyBtn) copyBtn.addEventListener("click", async ()=>{
+    const cmd=$("#um-cmd").textContent||"";
+    try{
+      await navigator.clipboard.writeText(cmd);
+      copyBtn.classList.add("copied"); copyBtn.textContent="Copied ✓";
+      if(copySub) copySub.textContent="Now paste it in your Terminal and press Return.";
+    }catch(e){
+      copyBtn.textContent="Couldn't copy";
+      if(copySub) copySub.textContent="Select the command above and copy it manually.";
+    }
+  });
+  if(laterBtn) laterBtn.addEventListener("click", hideUpdateModal);
+  ov.addEventListener("click", e=>{ if(e.target===ov) hideUpdateModal(); });
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !ov.classList.contains("hidden")) hideUpdateModal(); });
+})();
+
 async function load(){
   let d;
   try{ d = await (await fetch("/api/data")).json(); }
@@ -723,6 +800,7 @@ function render(d){
   $("#p-all").textContent=fmt(d.grand);
   const _eb=$("#empty-banner"); if(_eb) _eb.classList.toggle("hidden",(d.grand||0)>0);
   renderUpdateBanner(d.update);
+  if(d.update && d.update.outdated && !UPDATE_MODAL_SHOWN){ UPDATE_MODAL_SHOWN=true; showUpdateModal(d.update); }
 
   $("#tools").innerHTML = TOOLS.filter(t=>d.byTool&&d.byTool[t.k]).map(t=>
     `<span class="chip"><span class="dot" style="background:${t.c}"></span>${t.k}: <b>${fmt(d.byTool[t.k])}</b></span>`).join("");
@@ -1175,6 +1253,12 @@ $("#refresh").addEventListener("click",async()=>{
   $("#loading").classList.remove("hidden"); $("#lmsg").textContent="Rescanning…";
   try{ await fetch("/api/refresh"); }catch(e){}
   setTimeout(load, 600);
+  // also force a fresh (uncached) update check — lets a Rescan surface a just-published
+  // release immediately instead of waiting on the ~1h cache. Never allowed to break rescan.
+  try{
+    const u = await (await fetch("/api/checkupdate")).json();
+    if(u && u.outdated) showUpdateModal(u);
+  }catch(e){}
 });
 // suppress hover tooltips while scrolling (stops the dark tooltip flashing past the cursor)
 (function(){ let t; addEventListener('scroll', ()=>{ document.body.classList.add('is-scrolling'); clearTimeout(t); t=setTimeout(()=>document.body.classList.remove('is-scrolling'), 220); }, {passive:true}); })();

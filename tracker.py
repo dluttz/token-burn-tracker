@@ -118,6 +118,22 @@ def check_update():
         latest = None
     outdated = bool(latest) and _version_newer(latest, cur)
     return {"current": cur, "latest": latest, "outdated": outdated, "cmd": UPDATE_INSTALL_CMD}
+def force_check_update():
+    """Same shape as check_update(), but bypasses the ~1h cache — used by the manual
+    Rescan button so a user who just updated (or wants a fresh check) doesn't wait an hour.
+    Fail-silent: network errors just mean 'no update known', never a 500."""
+    cur = local_version()
+    try:
+        latest = _fetch_latest_version_uncached()
+    except Exception:
+        latest = None
+    # keep the shared cache in sync so a subsequent /api/data (within the hour) reflects this fresh check too
+    try:
+        _LIVE_CACHE["update_latest_version"] = (time.time(), latest)
+    except Exception:
+        pass
+    outdated = bool(latest) and _version_newer(latest, cur)
+    return {"current": cur, "latest": latest, "outdated": outdated, "cmd": UPDATE_INSTALL_CMD}
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
 CACHE_VERSION = 5   # bumped: cache entries now also store a per-file token breakdown (input/cache/output)
@@ -1619,6 +1635,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 out["update"] = check_update()
             except Exception:
                 out["update"] = {"current": local_version(), "latest": None, "outdated": False, "cmd": UPDATE_INSTALL_CMD}
+            self._send(200, json.dumps(out))
+        elif self.path.startswith("/api/checkupdate"):
+            # Manual, uncached update check — used by the Rescan button so it's never stale.
+            try:
+                out = force_check_update()
+            except Exception:
+                out = {"current": local_version(), "latest": None, "outdated": False, "cmd": UPDATE_INSTALL_CMD}
             self._send(200, json.dumps(out))
         elif self.path.startswith("/api/refresh"):
             if not STATE["loading"]:
