@@ -130,6 +130,8 @@
   .acount b{font-weight:650;color:var(--ink)}
   .adetail{display:none;padding:12px 15px 14px;cursor:default}
   .arun.open .adetail{display:block}
+  .adetail-open{margin:0 0 12px;padding-bottom:11px;border-bottom:1px dashed var(--rule);font-size:12.5px}
+  .adetail-open .alink{font-weight:650}
   .anote{color:var(--muted);font-size:13px;padding:10px 0}
   .livenote{color:var(--muted);font-size:13px;padding:10px 0}
   .idlerow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;margin-top:12px;padding-top:11px;border-top:1px dashed var(--rule)}
@@ -168,6 +170,8 @@
   .promptguide table{font-size:12.5px}
   .promptguide td,.promptguide th{padding:9px 12px}
   .promptguide tr:last-child td{border-bottom:none}
+  .subhd{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:20px 0 11px;padding-top:15px;border-top:1px dashed var(--rule);display:flex;align-items:center}
+  .effactions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
 
   /* token breakdown */
   .tbrows{display:flex;flex-direction:column;gap:12px}
@@ -364,6 +368,12 @@
   .emptybanner .eb-btn:hover{filter:brightness(1.07)}
   .addtoollink{display:inline-flex;align-items:center;gap:6px;margin:-2px 0 4px;border:none;background:transparent;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:4px 2px}
   .addtoollink:hover{text-decoration:underline}
+
+  /* update-available banner (accent-tinted, same shape as .emptybanner) */
+  .updatebanner{margin:0 0 16px}
+  .updatebanner .eb-p code{display:inline-block;margin-top:4px;background:rgba(var(--accent-rgb),.10);border:1px solid rgba(var(--accent-rgb),.22);border-radius:6px;padding:3px 8px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all}
+  .updatebanner .addtoollink{margin-left:2px}
+  @media (max-width:640px){ .updatebanner{flex-wrap:wrap} .updatebanner .addtoollink{width:100%;justify-content:center} }
   @media (max-width:640px){ .emptybanner{flex-direction:column;align-items:flex-start} .emptybanner .eb-btn{width:100%} }
 
   /* calendar heat follows the chosen accent */
@@ -481,6 +491,15 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
   <div id="loading" class="loading"><span class="spin"></span><span id="lmsg">Scanning your logs…</span></div>
 
   <div id="dash" class="hidden">
+    <div id="update-banner" class="emptybanner updatebanner hidden">
+      <span class="eb-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>
+      <div class="eb-tx">
+        <div class="eb-h" id="update-headline">Update available</div>
+        <div class="eb-p"><code id="update-cmd"></code></div>
+      </div>
+      <button class="eb-btn" id="update-copy">Copy</button>
+      <button class="addtoollink" id="update-dismiss">Dismiss</button>
+    </div>
     <div class="periods">
       <div class="pcard accent"><div class="k">Today</div><div class="v" id="p-day">—</div></div>
       <div class="pcard"><div class="k">This week</div><div class="v" id="p-week">—</div></div>
@@ -512,7 +531,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     <div class="panel">
       <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running, this shows what it's actually doing inside: which tools it's using and how often, code changes it made, and any helper 'sub-agents' it started. Hover a count for what it means; click a row to see the full detail.">?</span></h2>
         <span id="agents-at" style="margin-left:auto;color:var(--muted);font-size:12px"></span></div>
-      <p class="cap">Each row is one agent <b>run</b>. Hover a count to see what it means; click a row to expand tools touched, code patches, and any sub-agents it spawned. Live.</p>
+      <p class="cap">Each row is one agent <b>run</b>. Hover a count to see what it means; click a row to expand tools touched, code patches, and any sub-agents it spawned. Live. <i>MCP = external tools (browser, shell, files…); Task = the agent's to-do list.</i></p>
       <div id="agents"><div class="livenote">Checking…</div></div>
     </div>
 
@@ -567,30 +586,19 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel">
-      <h2>Where you can become more efficient <span class="help" data-tip="Habits you can change to use fewer tokens, based on your own heaviest chats and folders — plus a guide for which tool to use for which kind of task. These are things to do differently, not things to delete.">?</span></h2>
-      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders — plus a quick guide to the right tool for the job. <i>(Background jobs to switch off live in “suggested to remove” below.)</i></p>
+      <h2>Where you can become more efficient <span class="help" data-tip="Habits you can change to use fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. These are things to do differently, not things to delete.">?</span></h2>
+      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. <i>(Background jobs to switch off live in “suggested to remove” below.)</i></p>
       <div class="sugs" id="suggestions"></div>
-      <div class="promptguide">
-        <table>
-          <thead><tr><th>When you want to…</th><th>Use</th><th>Prompt it like</th></tr></thead>
-          <tbody>
-            <tr><td>A quick fact or rename</td><td>A small/fast model (Haiku, GPT-mini)</td><td>“In one line: …” — short, no extra context.</td></tr>
-            <tr><td>Focused edits in one repo</td><td>Codex</td><td>Name the exact file/function + the change.</td></tr>
-            <tr><td>Multi-file work or research</td><td>Claude Code / Cowork</td><td>State the goal once; let it plan with sub-agents.</td></tr>
-            <tr><td>Deep reasoning or design</td><td>Opus — sparingly</td><td>Full context once; ask for a plan first.</td></tr>
-            <tr><td>A thread getting expensive</td><td>/compact or a fresh thread</td><td>Summarize progress, start clean.</td></tr>
-          </tbody>
-        </table>
+      <h3 class="subhd">Token breakdown <span class="help" data-tip="Every token you've used, split into the four kinds Claude/Codex bill separately: new input you typed or pasted, cache write (context saved for reuse), cache read (that saved context being re-sent), and output the model generated. The mix tells you where to cut.">?</span></h3>
+      <div id="token-breakdown"></div>
+      <div class="effactions">
+        <button class="fixbtn" id="eff-compact" title="Paste this into your AI tool to summarize and drop old context — the #1 fix when cache-read tokens are high.">Copy /compact</button>
+        <button class="fixbtn" id="eff-scroll-waste" title="Jump to the background jobs and login agents you can switch off.">What to switch off ↓</button>
+        <span class="fixstatus" id="eff-status"></span>
       </div>
     </div>
 
-    <div class="panel">
-      <h2>Token breakdown <span class="help" data-tip="Every token you've used, split into the four kinds Claude/Codex bill separately: new input you typed or pasted, cache write (context saved for reuse), cache read (that saved context being re-sent), and output the model generated. The mix tells you where to cut.">?</span></h2>
-      <p class="cap">Where your tokens actually go — input, cache, and output — with a suggestion based on your own mix.</p>
-      <div id="token-breakdown"></div>
-    </div>
-
-    <div class="panel">
+    <div class="panel" id="waste-panel">
       <h2>Burning tokens with little value — suggested to remove <span class="help" data-tip="Background AI jobs and login items that run on their own and spend tokens whether or not you use the result. Each one explains what it is and has a one-click or guided way to turn it off (reversible).">?</span></h2>
       <p class="cap"><b>Things to switch off</b> — background AI jobs and login agents that run on their own and spend tokens whether or not you use the output. Each has a one-click or guided removal (all reversible). Updates live as you remove them.</p>
       <div id="waste"></div>
@@ -652,6 +660,26 @@ const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate
 let DAYS = {};       // "YYYY-MM-DD" -> {total, byTool}
 let calY, calM;      // calendar view month
 
+// ---- update-available banner (in-memory dismiss only — no localStorage/sessionStorage) ----
+let UPDATE_DISMISSED = false;
+function renderUpdateBanner(u){
+  const el=$("#update-banner"); if(!el) return;
+  if(!u || !u.outdated || UPDATE_DISMISSED){ el.classList.add("hidden"); return; }
+  $("#update-headline").textContent = `Update available — you're on v${u.current}, v${u.latest} is out.`;
+  $("#update-cmd").textContent = u.cmd || "";
+  el.classList.remove("hidden");
+}
+(function(){
+  const el=$("#update-banner"); if(!el) return;
+  const copyBtn=$("#update-copy"), dismissBtn=$("#update-dismiss");
+  if(copyBtn) copyBtn.addEventListener("click", async ()=>{
+    const cmd=$("#update-cmd").textContent||"";
+    try{ await navigator.clipboard.writeText(cmd); copyBtn.textContent="Copied ✓"; setTimeout(()=>{ copyBtn.textContent="Copy"; },1800); }
+    catch(e){ copyBtn.textContent="Couldn't copy"; setTimeout(()=>{ copyBtn.textContent="Copy"; },1800); }
+  });
+  if(dismissBtn) dismissBtn.addEventListener("click", ()=>{ UPDATE_DISMISSED=true; el.classList.add("hidden"); });
+})();
+
 async function load(){
   let d;
   try{ d = await (await fetch("/api/data")).json(); }
@@ -694,6 +722,7 @@ function render(d){
   $("#p-year").textContent=fmt(pYear);
   $("#p-all").textContent=fmt(d.grand);
   const _eb=$("#empty-banner"); if(_eb) _eb.classList.toggle("hidden",(d.grand||0)>0);
+  renderUpdateBanner(d.update);
 
   $("#tools").innerHTML = TOOLS.filter(t=>d.byTool&&d.byTool[t.k]).map(t=>
     `<span class="chip"><span class="dot" style="background:${t.c}"></span>${t.k}: <b>${fmt(d.byTool[t.k])}</b></span>`).join("");
@@ -901,6 +930,18 @@ function renderTokenBreakdown(bd){
     `<div class="tbtip"><span class="tbtag">Tip</span><div>${tip}</div></div>`;
 }
 
+// ---- efficiency action bar: copy /compact, jump to cleanup ----
+(function(){
+  const cb=$("#eff-compact"), sb=$("#eff-scroll-waste"), st=$("#eff-status");
+  if(cb) cb.addEventListener("click", async ()=>{
+    try{ await navigator.clipboard.writeText("/compact"); if(st){ st.className="fixstatus ok"; st.textContent="Copied ✓"; setTimeout(()=>{ if(st.textContent==="Copied ✓") st.textContent=""; },1800); } }
+    catch(e){ if(st){ st.className="fixstatus err"; st.textContent="Couldn't copy — select and copy manually."; } }
+  });
+  if(sb) sb.addEventListener("click", ()=>{
+    const target=$("#waste-panel"); if(target) target.scrollIntoView({behavior:"smooth", block:"start"});
+  });
+})();
+
 // ---- running now (merged: chats + processes, one titled list) ----
 function renderLive(d){
   d=d||{};
@@ -957,6 +998,34 @@ function agoShort(s){ s=+s||0; return s<60?s+"s":(s<3600?Math.round(s/60)+"m":Ma
 const AGENTS_OPEN = new Set();   // set of r.file keys currently expanded
 function runKey(r,i){ return r.file || (r.tool+'|'+r.title+'|'+i); }
 const SVG_CHEVRON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+
+// ---- tool-name glossary: plain-English "what is this?" for the .achip / .acount hover tooltips ----
+const MCP_SUFFIX_GLOSSARY = {
+  browser_batch: "drives the web browser (click/type/navigate)",
+  computer: "controls mouse, keyboard, and screenshots",
+  bash: "runs terminal/shell commands",
+  file_upload: "uploads a file into a web page",
+  find: "locates an element on a web page",
+  navigate: "opens a web page",
+  read_page: "reads a page's content",
+};
+const TASK_SUFFIX_GLOSSARY = {
+  TaskCreate: "adds a task",
+  TaskUpdate: "marks a task done/updates it",
+};
+function toolTip(name){
+  const n = String(name||"");
+  if(n.startsWith("MCP·") || n.startsWith("MCP ")){
+    const suffix = n.slice(n.indexOf(n.startsWith("MCP·")?"·":" ")+1).trim();
+    const specific = MCP_SUFFIX_GLOSSARY[suffix];
+    return "External tool the agent called (Model Context Protocol)." + (specific ? " Here: "+specific+"." : "");
+  }
+  if(n.startsWith("Task")){
+    const specific = TASK_SUFFIX_GLOSSARY[n];
+    return "The agent managing its own to-do list." + (specific ? " Here: "+specific+"." : "");
+  }
+  return "A tool the agent used while working.";
+}
 function renderAgents(runs){
   const el=$("#agents");
   if(!runs||!runs.length){ el.innerHTML='<div class="anote">No agent runs in the last 30 minutes. When you run Codex, Claude Code, or a Cowork task, its live activity — tools touched, code patches, and any sub-agents it spawns — appears here.</div>'; return; }
@@ -972,18 +1041,21 @@ function renderAgents(runs){
     if(r.toolCalls) summary.push(`<span class="acount" title="${r.toolCalls} tool call${r.toolCalls>1?'s':''} across ${nTools} distinct tool${nTools===1?'':'s'} — click to see which ones">⚙ <b>${r.toolCalls}</b></span>`);
     if(r.patches) summary.push(`<span class="acount" title="${r.patches} code patch${r.patches>1?'es':''} applied by this run — click to see the timeline">✎ <b>${r.patches}</b></span>`);
     if(nSub) summary.push(`<span class="acount" title="${nSub} sub-agent${nSub>1?'s':''} spawned by this run — click to see what each one did">▸ <b>${nSub}</b></span>`);
-    if(r.mcp) summary.push(`<span class="acount" title="${r.mcp} MCP tool call${r.mcp>1?'s':''} (external tool integrations)">⇄ <b>${r.mcp}</b></span>`);
+    if(r.mcp) summary.push(`<span class="acount" title="${r.mcp} MCP tool call${r.mcp>1?'s':''} — ${toolTip('MCP·')}">⇄ <b>${r.mcp}</b></span>`);
 
     const titleHtml = r.file
       ? `<a class="atitle alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" title="Open this chat's full transcript in a new tab" onclick="event.stopPropagation()">${esc(r.title)} ↗</a>`
       : `<span class="atitle" title="${esc(r.title)}">${esc(r.title)}</span>`;
 
     // ---- expanded detail: unchanged from before, just hidden until opened ----
-    const tools=(r.topTools||[]).map(([n,k])=>`<span class="achip"><b>${esc(n)}</b> ${k}</span>`).join("");
+    const transcriptLink = r.file
+      ? `<div class="adetail-open"><a class="alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><b>Open full transcript ↗</b></a> <span style="color:var(--muted)">— See every tool call in order.</span></div>`
+      : "";
+    const tools=(r.topTools||[]).map(([n,k])=>`<span class="achip" title="${esc(toolTip(n))}"><b>${esc(n)}</b> ${k}</span>`).join("");
     const extra=[];
     if(r.toolCalls) extra.push(`<span class="achip">${r.toolCalls} tool call${r.toolCalls>1?'s':''}</span>`);
     if(r.patches) extra.push(`<span class="achip">${r.patches} code patch${r.patches>1?'es':''}</span>`);
-    if(r.mcp) extra.push(`<span class="achip">${r.mcp} MCP call${r.mcp>1?'s':''}</span>`);
+    if(r.mcp) extra.push(`<span class="achip" title="${esc(toolTip('MCP·'))}">${r.mcp} MCP call${r.mcp>1?'s':''}</span>`);
     if(r.reasoning) extra.push(`<span class="achip">${r.reasoning} reasoning step${r.reasoning>1?'s':''}</span>`);
     const subs=(r.subagents||[]).length ? `<div class="asub"><div class="salabel">Sub-agents (${r.subagents.length})</div>`+
        r.subagents.map(s=>`<div class="sa"><span class="saty">▸</span><span>${esc(s.desc||s.type||'sub-agent')}${s.type?` <span style="color:var(--muted)">(${esc(s.type)})</span>`:''}</span></div>`).join("")+`</div>` : "";
@@ -998,7 +1070,7 @@ function renderAgents(runs){
       `<span class="ameta" title="Last activity ${agoShort(r.ago)} ago">${agoShort(r.ago)} ago</span>`+
       `<span class="asummary">${summary.join("")}</span>`+
       `</div>`+
-      `<div class="adetail"><div class="achips">${tools}${extra.join("")}</div>${subs}${feed}</div>`+
+      `<div class="adetail">${transcriptLink}<div class="achips">${tools}${extra.join("")}</div>${subs}${feed}</div>`+
       `</div>`;
   }).join("");
 }

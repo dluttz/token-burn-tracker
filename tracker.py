@@ -73,6 +73,52 @@ def analytics_launch():
         })
     except Exception:
         pass
+
+# ---------- in-app "update available" check ----------
+# Fail-silent, network-lazy (only fetched on /api/data, cached ~1h via _cached()) version check
+# against the public VERSION file on GitHub. Never blocks startup, never raises.
+UPDATE_VERSION_URL = "https://raw.githubusercontent.com/dluttz/token-burn-tracker/main/VERSION"
+UPDATE_INSTALL_CMD = "curl -fsSL https://dluttz.github.io/token-burn-tracker/install.sh | bash"
+def local_version():
+    try:
+        return open(os.path.join(HERE, "VERSION")).read().strip() or "?"
+    except Exception:
+        return "?"
+def _ver_tuple(v):
+    """'1.2.3' -> (1,2,3); unknown/'?'/blank -> (0,) so any real remote version outranks it."""
+    if not v or v == "?":
+        return (0,)
+    parts = []
+    for p in str(v).strip().split("."):
+        try:
+            parts.append(int(p))
+        except Exception:
+            parts.append(0)
+    return tuple(parts) or (0,)
+def _version_newer(a, b):
+    """True if version string a > version string b, comparing numerically component-by-component."""
+    ta, tb = _ver_tuple(a), _ver_tuple(b)
+    n = max(len(ta), len(tb))
+    ta = ta + (0,) * (n - len(ta)); tb = tb + (0,) * (n - len(tb))
+    return ta > tb
+def _fetch_latest_version_uncached():
+    try:
+        req = urllib.request.Request(UPDATE_VERSION_URL, headers={"User-Agent": "token-burn-tracker"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            v = r.read().decode("utf-8", "ignore").strip()
+        return v or None
+    except Exception:
+        return None
+def check_update():
+    """Lazy, cached (~1h), fail-silent update check. Safe to call from a request handler."""
+    cur = local_version()
+    try:
+        latest = _cached("update_latest_version", 3600, _fetch_latest_version_uncached)
+    except Exception:
+        latest = None
+    outdated = bool(latest) and _version_newer(latest, cur)
+    return {"current": cur, "latest": latest, "outdated": outdated, "cmd": UPDATE_INSTALL_CMD}
+
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
 CACHE_VERSION = 5   # bumped: cache entries now also store a per-file token breakdown (input/cache/output)
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
@@ -1569,6 +1615,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                    "files": STATE["files"], "parsed": STATE["parsed"]}
             if STATE["data"]:
                 out.update(STATE["data"])
+            try:
+                out["update"] = check_update()
+            except Exception:
+                out["update"] = {"current": local_version(), "latest": None, "outdated": False, "cmd": UPDATE_INSTALL_CMD}
             self._send(200, json.dumps(out))
         elif self.path.startswith("/api/refresh"):
             if not STATE["loading"]:
