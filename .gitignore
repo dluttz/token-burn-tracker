@@ -7,6 +7,9 @@
 # Per-install secret action token (authorizes kill / fix / add-source)
 .fixtoken
 
+# Anonymous analytics install id (random, no personal data)
+.install_id
+
 # User-added custom tool sources (local paths, personal config)
 custom_sources.json
 

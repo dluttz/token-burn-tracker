@@ -10,7 +10,7 @@ Sources:
 Adds a "why" view: tokens grouped by SESSION, titled by the first user prompt
 (Claude Code / Cowork) or the Codex thread name. stdlib only; binds to 127.0.0.1.
 """
-import http.server, socketserver, json, os, re, glob, threading, datetime, traceback, subprocess, time, sqlite3, secrets, signal
+import http.server, socketserver, json, os, re, glob, threading, datetime, traceback, subprocess, time, sqlite3, secrets, signal, platform, urllib.request
 from collections import defaultdict, deque
 
 SESS_RE = re.compile(r'local_[0-9a-fA-F-]{6,}')
@@ -31,6 +31,48 @@ try:
     os.makedirs(DATA_DIR, exist_ok=True)
 except Exception:
     DATA_DIR = HERE
+
+# ---------- anonymous, opt-out usage analytics (never sends content) ----------
+# One small launch event (install id, app + macOS version, which integrations exist)
+# so improvements can be prioritized. Never sends prompts, titles, or token amounts.
+# Turn it off with:  TOKENBURN_ANALYTICS=off
+PH_KEY = "phc_sfV8RXR5sqqRboLPP8Px75FDBPzoGmgHZqrKrT8nEfZv"
+PH_HOST = os.environ.get("TOKENBURN_PH_HOST", "https://us.i.posthog.com")
+ANALYTICS_ON = os.environ.get("TOKENBURN_ANALYTICS", "on").lower() not in ("off", "0", "false", "no")
+def _install_id():
+    p = os.path.join(DATA_DIR, ".install_id")
+    try:
+        if os.path.exists(p): return open(p).read().strip()
+        iid = secrets.token_hex(16); open(p, "w").write(iid); return iid
+    except Exception:
+        return "unknown"
+def analytics_event(event, props=None):
+    if not (ANALYTICS_ON and PH_KEY): return
+    def _send():
+        try:
+            body = json.dumps({"api_key": PH_KEY, "event": event,
+                               "distinct_id": _install_id(), "properties": dict(props or {})}).encode()
+            req = urllib.request.Request(PH_HOST.rstrip("/") + "/capture/", data=body,
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=4).read()
+        except Exception:
+            pass
+    threading.Thread(target=_send, daemon=True).start()
+def analytics_launch():
+    try:
+        ver = "?"
+        try: ver = open(os.path.join(HERE, "VERSION")).read().strip()
+        except Exception: pass
+        analytics_event("app_launched", {
+            "app_version": ver, "macos": (platform.mac_ver()[0] or "?"),
+            "python": platform.python_version(), "$os": "Mac OS X",
+            "uses_claude_code": os.path.isdir(HOME + "/.claude/projects"),
+            "uses_cowork": os.path.isdir(HOME + "/Library/Application Support/Claude/local-agent-mode-sessions"),
+            "uses_codex": os.path.isdir(HOME + "/.codex/sessions"),
+            "widget_installed": os.path.isdir(HOME + "/Library/Application Support/Übersicht/widgets/token-burn.widget"),
+        })
+    except Exception:
+        pass
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
 CACHE_VERSION = 4
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
@@ -1576,4 +1618,5 @@ if __name__ == "__main__":
     threading.Thread(target=periodic_rebuild, daemon=True).start()
     print(f"Token Burn Tracker -> http://localhost:{PORT}")
     print("Scanning your Claude Code / Cowork / Codex logs… (first scan can take a bit)")
+    analytics_launch()
     Server(("127.0.0.1", PORT), Handler).serve_forever()

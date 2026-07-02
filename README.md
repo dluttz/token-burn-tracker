@@ -1,7 +1,7 @@
 # Token Burn Tracker
 
 A **100% local** dashboard that shows how many tokens your AI coding tools are
-burning — live, on your own Mac. No account, no cloud, nothing leaves your machine.
+burning — live, on your own Mac. No account and no cloud — your prompts and token data stay on your Mac.
 
 Works with **Claude Code**, **Cowork**, and **Codex** out of the box, and you can
 add other tools yourself.
@@ -46,7 +46,7 @@ curl -fsSL https://dluttz.github.io/token-burn-tracker/install.sh | bash
 It downloads the latest files into `~/.token-burn-tracker`, starts the local
 dashboard, opens **http://localhost:8799**, and — if you have Übersicht — adds the
 desktop widget. Because it runs from Terminal, there's **no macOS "unverified
-developer" prompt**, and nothing leaves your Mac.
+developer" prompt**, and your prompts and logs stay on your Mac.
 
 **Everyday use afterwards:**
 
@@ -73,8 +73,10 @@ It reads the local log files your AI tools already write:
 The dashboard can display your **chat titles and full transcripts** so you can see
 where tokens went. **All of this is rendered locally in your browser.**
 
-- **The server makes no outbound network calls.** The only network traffic is your
-  browser talking to `localhost`. Nothing is uploaded anywhere.
+- **Your prompts, logs, and token counts never leave your Mac** — they're read and
+  rendered locally, never uploaded. The app does send **anonymous, aggregate usage
+  stats** (a random install ID, app + macOS version, and which integrations you use —
+  never any content) to help improve it. Turn it off with `TOKENBURN_ANALYTICS=off`.
 - A small cache (`.cache.json`) and a per-install action token (`.fixtoken`) live in
   `~/.token-burn-tracker` (or next to `tracker.py` for the app build) — never published.
 
