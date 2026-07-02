@@ -136,7 +136,7 @@ def force_check_update():
     return {"current": cur, "latest": latest, "outdated": outdated, "cmd": UPDATE_INSTALL_CMD}
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 5   # bumped: cache entries now also store a per-file token breakdown (input/cache/output)
+CACHE_VERSION = 6   # bumped: entry tuples now carry a 7th field (source file path) for per-session transcript links
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -187,7 +187,7 @@ def _ts_date(v):
     except Exception:
         return None
 
-# ---------- parsers -> (entries[[date,tool,model,project,tokens,sessionKey]], titles{sk:title}) ----------
+# ---------- parsers -> (entries[[date,tool,model,project,tokens,sessionKey,filePath]], titles{sk:title}) ----------
 def _empty_breakdown():
     return {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
 
@@ -236,7 +236,7 @@ def claude_entries(path, tool, file_date):
                 slug = d.get("slug")
                 if slug:
                     titles.setdefault(sk, str(slug).replace("-", " "))
-                entries.append([date, tool, msg.get("model") or "?", d.get("cwd") or default_cwd, tk, sk])
+                entries.append([date, tool, msg.get("model") or "?", d.get("cwd") or default_cwd, tk, sk, path])
     except Exception:
         pass
     return entries, titles, tb
@@ -280,7 +280,7 @@ def codex_entries(path, file_date, index_map):
     total = sum(by_date.values())
     if total > 0:
         sk = "Codex:" + (sid or os.path.basename(path))
-        ents = [[dt, "Codex", model or "codex", cwd or "?", int(tok), sk]
+        ents = [[dt, "Codex", model or "codex", cwd or "?", int(tok), sk, path]
                 for dt, tok in by_date.items() if tok > 0]
         # Codex's rollout logs only expose a cumulative total_tokens per event (no
         # input/cache/output split), so its share of the token breakdown is left at 0 —
@@ -391,7 +391,7 @@ def custom_entries(path, src, file_date):
                 by_date[dt] += tok
     except Exception:
         pass
-    ents = [[dt, name, src.get("model") or "?", proj, int(tok), sk] for dt, tok in by_date.items() if tok > 0]
+    ents = [[dt, name, src.get("model") or "?", proj, int(tok), sk, path] for dt, tok in by_date.items() if tok > 0]
     # Custom sources only declare which field(s) hold a token count, not which kind
     # (input/cache/output), so they don't contribute to the token breakdown split.
     return ents, ({sk: os.path.basename(path)} if ents else {}), _empty_breakdown()
@@ -535,8 +535,10 @@ def aggregate(entries, titles):
     tool = defaultdict(int)
     sess = defaultdict(int)
     sess_meta = {}
+    sess_file = {}   # session key -> first source .jsonl path seen for it (for transcript links)
+    sess_date = {}   # session key -> latest activity date (to find the chat in the app's date-grouped list)
     grand = 0
-    for date, tl, md, cwd, tk, sk in entries:
+    for date, tl, md, cwd, tk, sk, fpath in entries:
         if not date or len(date) < 10:
             date = "unknown"
         day[date][tl] += tk
@@ -552,6 +554,10 @@ def aggregate(entries, titles):
         sess[sk] += tk
         if sk not in sess_meta:
             sess_meta[sk] = (tl, sp)
+        if fpath:
+            sess_file.setdefault(sk, fpath)
+        if date != "unknown" and date > sess_date.get(sk, ""):
+            sess_date[sk] = date
         grand += tk
     today = datetime.date.today().isoformat()
     weekago = (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
@@ -567,7 +573,7 @@ def aggregate(entries, titles):
     for sk, v in sorted(sess.items(), key=lambda x: -x[1])[:30]:
         tl, sp = sess_meta.get(sk, ("?", "?"))
         title = titles.get(sk) or sp or "(session)"
-        bySession.append([title, sp, tl, v])
+        bySession.append([title, sp, tl, v, sess_file.get(sk, ""), sess_date.get(sk, "")])
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
             "grand": grand, "today": day_total.get(today, 0), "week": week,
             "byTool": dict(tool), "days": days, "byProject": byProject,

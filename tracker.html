@@ -182,6 +182,15 @@
   .tbfill{height:100%;background:var(--accent);border-radius:7px 0 0 7px;transition:width .3s}
   .tbtip{margin-top:14px;display:flex;gap:10px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.5}
   .tbtip .tbtag{flex:none;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
+  .fixchats{display:flex;flex-direction:column;gap:5px;margin:8px 0 2px}
+  .fixchat{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
+  .fixdot{width:8px;height:8px;border-radius:50%;flex:none}
+  .fixchat b{flex:none}
+  .fixchat-t{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .fixchat-d{color:var(--muted);font-size:12px;flex:none;font-weight:600}
+  .fixcmd{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
+  .fixcmd-label{color:var(--muted);font-size:12.5px}
+  .fixcmd-code{font-family:ui-monospace,Menlo,monospace;background:rgba(var(--accent-rgb),.12);color:var(--ink);padding:3px 9px;border-radius:7px;font-size:13px;font-weight:600}
 
   /* waste */
   .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:11px;padding:13px 15px;margin:10px 0}
@@ -468,7 +477,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
   <a class="nav" data-go="Over time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 3 4-7"/></svg>Over time</a>
   <a class="nav" data-go="top projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Projects</a>
   <a class="nav" data-go="more efficient"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>Efficiency</a>
-  <a class="nav" data-go="suggested to remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg>Cleanup</a>
+  <a class="nav" data-go="suggested fixes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg>Fixes</a>
   <a class="nav" data-go="Tracked tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Tools</a>
   <div class="themeswitch" id="theme-switch">
     <button data-theme="light">Light</button><button data-theme="dark">Dark</button><button data-theme="soft">Soft</button>
@@ -629,7 +638,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
 
     <div class="panel">
       <h2>Where you can become more efficient <span class="help" data-tip="Habits you can change to use fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. These are things to do differently, not things to delete.">?</span></h2>
-      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. <i>(Background jobs to switch off live in “suggested to remove” below.)</i></p>
+      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. <i>(Background jobs to switch off live in “suggested fixes” below.)</i></p>
       <div class="sugs" id="suggestions"></div>
       <h3 class="subhd">Token breakdown <span class="help" data-tip="Every token you've used, split into the four kinds Claude/Codex bill separately: new input you typed or pasted, cache write (context saved for reuse), cache read (that saved context being re-sent), and output the model generated. The mix tells you where to cut.">?</span></h3>
       <div id="token-breakdown"></div>
@@ -641,8 +650,9 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel" id="waste-panel">
-      <h2>Burning tokens with little value — suggested to remove <span class="help" data-tip="Background AI jobs and login items that run on their own and spend tokens whether or not you use the result. Each one explains what it is and has a one-click or guided way to turn it off (reversible).">?</span></h2>
-      <p class="cap"><b>Things to switch off</b> — background AI jobs and login agents that run on their own and spend tokens whether or not you use the output. Each has a one-click or guided removal (all reversible). Updates live as you remove them.</p>
+      <h2>Burning tokens — suggested fixes <span class="help" data-tip="Concrete ways to cut your token use. First, fixes based on your own usage mix (the token breakdown above) — these work for anyone. Then any background AI jobs or login agents running on their own that you can switch off (specific to this Mac, reversible).">?</span></h2>
+      <p class="cap"><b>What to change to burn fewer tokens</b> — first tailored to where your tokens actually go, then background jobs to switch off. The habit fixes apply to anyone; the removals are specific to what's running on this Mac.</p>
+      <div id="token-fixes"></div>
       <div id="waste"></div>
     </div>
 
@@ -815,6 +825,7 @@ function render(d){
   renderTop10(d.days||[]);
   renderInsights(d.insights);
   renderTokenBreakdown(d.tokenBreakdown);
+  renderTokenFixes(d.tokenBreakdown, d.bySession);
   $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; nothing leaves your Mac.`;
 }
 
@@ -968,6 +979,69 @@ function renderTop10(days){
 }
 
 // ---- token breakdown (input / cache write / cache read / output) ----
+// ---- data-driven "suggested fixes" from the token mix (universal; personalized by each user's own %) ----
+function copyFixCmd(btn,text){ try{ navigator.clipboard.writeText(text); const o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(()=>{btn.textContent=o;},1500);}catch(e){ btn.textContent="Copy failed"; } }
+// A short date label matching how the apps group chats (Today / Yesterday / "Jun 30").
+function shortDate(iso){
+  if(!iso) return "";
+  const p=String(iso).split("-"); if(p.length<3) return "";
+  const d=new Date(+p[0],(+p[1])-1,+p[2]);
+  const now=new Date(); now.setHours(0,0,0,0);
+  const diff=Math.round((now-d)/86400000);
+  if(diff===0) return "Today";
+  if(diff===1) return "Yesterday";
+  const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(+p[1])-1];
+  return m ? `${m} ${(+p[2])}` : "";
+}
+// Top up-to-3 heaviest chats shown plainly — tool (LLM) + date + the chat's name — so you can find
+// it in the app's date-grouped list. No link: these apps can't be reopened from a click.
+function chatListHTML(sessions){
+  const list=(sessions||[]).filter(s=>s && s[0]).slice(0,3);
+  if(!list.length) return "";
+  const rows=list.map(s=>{
+    const title=String(s[0]||"untitled");
+    const short=title.length>50 ? title.slice(0,50)+"…" : title;
+    const tool=String(s[2]||"?");
+    const dt=shortDate(s[5]);
+    const c=(typeof COLOR!=="undefined" && COLOR[tool]) || "#999";
+    return `<div class="fixchat"><span class="fixdot" style="background:${c}"></span><b>${esc(tool)}</b>${dt?`<span class="fixchat-d">· ${dt}</span>`:''}<span class="fixchat-t">“${esc(short)}”</span></div>`;
+  }).join("");
+  return `<div class="fixchats">${rows}</div>`;
+}
+function renderTokenFixes(bd, sessions){
+  const el=$("#token-fixes"); if(!el) return;
+  bd=bd||{};
+  const inp=+bd.input||0, cr=+bd.cache_read||0, cw=+bd.cache_write||0, out=+bd.output||0;
+  const total=inp+cr+cw+out;
+  if(total<=0){ el.innerHTML='<div class="livenote">Personalized fixes appear here once your logs have data.</div>'; return; }
+  const pct=v=>((v/total)*100);
+  const box=(title,body,extra)=>`<div class="tbtip"><span class="tbtag">Fix</span><div><b>${esc(title)}</b><br><span style="color:var(--muted)">${body}</span>${extra||''}</div></div>`;
+  const cards=[];
+  if(pct(cr)>=40){
+    const list=chatListHTML(sessions);
+    const cmd = `<div class="fixcmd"><span class="fixcmd-label">In that chat, type:</span><code class="fixcmd-code">/compact</code><button class="fixbtn" onclick="copyFixCmd(this,'/compact')" title="Copies the text “/compact” to your clipboard so you can paste it into that chat">Copy “/compact”</button></div>`;
+    cards.push(box(`Your biggest chats keep re-reading themselves (${pct(cr).toFixed(0)}%)`,
+      "Each one re-sends its whole history every turn. Find it in your app by the date shown, then run <code class=\"fixcmd-code\">/compact</code> in it (or start a fresh thread):",
+      `${list}${cmd}`));
+  }
+  if(pct(out)>=25){
+    cards.push(box(`Long responses (${pct(out).toFixed(0)}%)`,
+      "Ask for terser answers — “just the diff,” no explanation."));
+  }
+  if(pct(inp)>=25){
+    cards.push(box(`Big prompts (${pct(inp).toFixed(0)}%)`,
+      "Trim pasted context, and reference files by path instead of pasting them whole."));
+  }
+  if(pct(cw)>=20 && cards.length<3){
+    cards.push(box(`Lots of new context saved (${pct(cw).toFixed(0)}%)`,
+      "Normal for long sessions — wrap up finished threads so it doesn’t pile into the next one."));
+  }
+  if(!cards.length){
+    cards.push(box("Your usage is well balanced",
+      "Biggest general win: end threads when a task is done."));
+  }
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:9px;margin-bottom:8px">${cards.slice(0,3).join("")}</div>`;
+}
 function renderTokenBreakdown(bd){
   const el=$("#token-breakdown"); if(!el) return;
   bd=bd||{};
