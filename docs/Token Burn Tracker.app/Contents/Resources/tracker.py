@@ -573,7 +573,14 @@ def aggregate(entries, titles):
     for sk, v in sorted(sess.items(), key=lambda x: -x[1])[:30]:
         tl, sp = sess_meta.get(sk, ("?", "?"))
         title = titles.get(sk) or sp or "(session)"
-        bySession.append([title, sp, tl, v, sess_file.get(sk, ""), sess_date.get(sk, "")])
+        fp = sess_file.get(sk, "")
+        when = ""   # last-active time (transcript file mtime) so the fix card can show a precise time, like the live box
+        if fp:
+            try:
+                when = datetime.datetime.fromtimestamp(os.path.getmtime(fp)).isoformat(timespec="minutes")
+            except Exception:
+                when = ""
+        bySession.append([title, sp, tl, v, fp, sess_date.get(sk, ""), when])
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
             "grand": grand, "today": day_total.get(today, 0), "week": week,
             "byTool": dict(tool), "days": days, "byProject": byProject,

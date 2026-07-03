@@ -194,9 +194,11 @@
   .fixcmd{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
   .fixcmd-label{color:var(--muted);font-size:12.5px}
   .fixcmd-code{font-family:ui-monospace,Menlo,monospace;background:rgba(var(--accent-rgb),.12);color:var(--ink);padding:3px 9px;border-radius:7px;font-size:13px;font-weight:600}
-  .fixrems{margin-top:11px;display:flex;flex-direction:column;gap:8px}
-  .fixrem{font-size:12.8px;line-height:1.55}
-  .fixrem .fixbtn{margin-left:8px;padding:4px 11px;font-size:11.5px;vertical-align:middle}
+  .fixsol{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+  .fixstep{display:flex;gap:9px;align-items:flex-start;font-size:12.9px;line-height:1.5}
+  .fixnum{flex:none;width:19px;height:19px;border-radius:50%;background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .fixstep .fixcmd{margin-top:7px}
+  .fixnote{font-size:12px;color:var(--muted);line-height:1.5}
 
   /* waste */
   .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:11px;padding:13px 15px;margin:10px 0}
@@ -987,6 +989,14 @@ function renderTop10(days){
 // ---- token breakdown (input / cache write / cache read / output) ----
 // ---- data-driven "suggested fixes" from the token mix (universal; personalized by each user's own %) ----
 function copyFixCmd(btn,text){ try{ navigator.clipboard.writeText(text); const o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(()=>{btn.textContent=o;},1500);}catch(e){ btn.textContent="Copy failed"; } }
+// Copy longer text stored in a data-copy attribute (avoids quoting a full prompt inside onclick).
+function copyAttr(btn){
+  const t=btn.getAttribute('data-copy')||'';
+  try{ navigator.clipboard.writeText(t); const o=btn.getAttribute('data-label')||btn.textContent;
+    btn.setAttribute('data-label',o); btn.textContent="Copied ✓"; btn.classList.add('ok');
+    setTimeout(()=>{btn.textContent=o;btn.classList.remove('ok');},1600);
+  }catch(e){ btn.textContent="Copy failed"; }
+}
 // A short date label matching how the apps group chats (Today / Yesterday / "Jun 30").
 function shortDate(iso){
   if(!iso) return "";
@@ -999,7 +1009,13 @@ function shortDate(iso){
   const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(+p[1])-1];
   return m ? `${m} ${(+p[2])}` : "";
 }
-// Top up-to-3 heaviest chats — tool (LLM) + date + how the chat opened — so you can spot each one in
+// Time-of-day from the session's last-active timestamp (transcript mtime), e.g. "3:47 PM".
+function timeOf(iso){
+  if(!iso) return "";
+  const d=new Date(iso); if(isNaN(d.getTime())) return "";
+  try{ return d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); }catch(e){ return ""; }
+}
+// Top up-to-3 heaviest chats — tool (LLM) + date + time + how the chat opened — so you can spot each one in
 // your sidebar's date groups. (These apps auto-title chats with their own model and don't expose that
 // title or a deep-link on disk, so we identify each chat by its date + opening line.)
 function chatListHTML(sessions){
@@ -1010,8 +1026,10 @@ function chatListHTML(sessions){
     const short=title.length>72 ? title.slice(0,72)+"…" : title;
     const tool=String(s[2]||"?");
     const dt=shortDate(s[5]);
+    const tm=timeOf(s[6]);
+    const when=dt?(tm?`${dt} · ${tm}`:dt):tm;
     const c=(typeof COLOR!=="undefined" && COLOR[tool]) || "#999";
-    return `<div class="fixchat"><span class="fixdot" style="background:${c}"></span><b>${esc(tool)}</b>${dt?`<span class="fixchat-d">· ${dt}</span>`:''}<span class="fixchat-t">“${esc(short)}”</span></div>`;
+    return `<div class="fixchat"><span class="fixdot" style="background:${c}"></span><b>${esc(tool)}</b>${when?`<span class="fixchat-d">· ${when}</span>`:''}<span class="fixchat-t">“${esc(short)}”</span></div>`;
   }).join("");
   return `<div class="fixchats">${rows}</div>`;
 }
@@ -1026,21 +1044,18 @@ function renderTokenFixes(bd, sessions){
   const cards=[];
   if(pct(cr)>=40){
     const list=chatListHTML(sessions);
-    // Remedy is tool-specific: Cowork has no /compact command (start a fresh chat); Claude Code has /compact; Codex resets via a new session.
-    const shown=(sessions||[]).filter(s=>s&&s[0]).slice(0,3);
-    const tools=[...new Set(shown.map(s=>String(s[2]||"")))];
-    const rem=[];
-    if(tools.some(t=>/cowork/i.test(t)))
-      rem.push(`<div class="fixrem"><b>Cowork:</b> start a <b>new chat</b> when you don’t need the earlier history — a fresh chat drops the re-reading back to zero. <span style="color:var(--muted)">(Cowork has no <code class="fixcmd-code">/compact</code> command.)</span></div>`);
-    if(tools.some(t=>/claude\s*code/i.test(t)))
-      rem.push(`<div class="fixrem"><b>Claude Code:</b> run <code class="fixcmd-code">/compact</code> to shrink the thread in place, or <code class="fixcmd-code">/clear</code> for a clean slate. <button class="fixbtn" onclick="copyFixCmd(this,'/compact')" title="Copies “/compact” so you can paste it into a Claude Code session">Copy “/compact”</button></div>`);
-    if(tools.some(t=>/codex/i.test(t)))
-      rem.push(`<div class="fixrem"><b>Codex:</b> start a <b>new session</b> to reset the context.</div>`);
-    if(!rem.length)
-      rem.push(`<div class="fixrem">Start a <b>new chat</b> when you don’t need the earlier history — it drops the re-reading back to zero.</div>`);
+    const cc=[...new Set((sessions||[]).filter(s=>s&&s[0]).slice(0,3).map(s=>String(s[2]||"")))].some(t=>/claude\s*code/i.test(t));
+    // Universal, lossless fix: have the AI itself compress the thread into a carry-over note, then continue in a fresh chat.
+    const HANDOFF="Write a compact handoff note I can paste into a NEW chat to continue this exact work with full context — include the goal, the key decisions so far, the current state, the files/links involved, and the immediate next step. Keep it tight; don’t re-explain the whole history.";
+    const solution=`<div class="fixsol">
+      <div class="fixstep"><span class="fixnum">1</span><div>In the heavy chat, paste this once — it turns the whole thread into one short carry-over note:
+        <div class="fixcmd"><button class="fixbtn" data-copy="${esc(HANDOFF)}" data-label="Copy handoff prompt" onclick="copyAttr(this)">Copy handoff prompt</button></div></div></div>
+      <div class="fixstep"><span class="fixnum">2</span><div>Open a <b>new chat</b> and paste the note it gives back. You keep every bit of context, but the fresh chat starts lean — the ${pct(cr).toFixed(0)}% re-reading resets to zero.</div></div>
+      <div class="fixnote">Works in <b>any</b> assistant — Cowork, Claude&nbsp;Code, Codex, ChatGPT, Gemini — because it’s just a prompt.${cc?` <b>Claude&nbsp;Code</b> also has a built-in shortcut: <code class="fixcmd-code">/compact</code>.`:``}</div>
+    </div>`;
     cards.push(box(`Your biggest chats keep re-reading themselves (${pct(cr).toFixed(0)}%)`,
-      "Each one re-sends its whole history every turn. Spot them in your sidebar by date + opening line, then stop growing one giant thread:",
-      `${list}<div class="fixrems">${rem.join("")}</div>`));
+      "Each re-sends its whole history every turn. The fix is to carry the context into a fresh chat so the new one starts lean — here’s the exact way, in any assistant:",
+      `${list}${solution}`));
   }
   if(pct(out)>=25){
     cards.push(box(`Long responses (${pct(out).toFixed(0)}%)`,
