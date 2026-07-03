@@ -1,0 +1,67 @@
+#!/bin/bash
+# Token Burn Tracker — one-click launcher: start server -> open dashboard -> add widget.
+set -u
+EXEC_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONTENTS="$(cd "$EXEC_DIR/.." && pwd)"
+APP="$(cd "$CONTENTS/.." && pwd)"
+RES="$CONTENTS/Resources"
+DATA="$HOME/Library/Application Support/TokenBurnTracker"
+mkdir -p "$DATA"
+exec >>"$DATA/launch.log" 2>&1
+echo "===== launch $(date) ====="; echo "APP=$APP"
+PORT=8799
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+note(){ /usr/bin/osascript -e "display notification \"$1\" with title \"Token Burn Tracker\"" >/dev/null 2>&1; }
+say(){ /usr/bin/osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with title \"Token Burn Tracker\"" >/dev/null 2>&1; }
+
+# Smooth out future launches
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+# --- Python 3 required ---
+PY="$(command -v python3 || true)"
+if [ -z "$PY" ] || ! "$PY" -c 'import sys' >/dev/null 2>&1; then
+  if /usr/bin/osascript -e 'display dialog "Token Burn Tracker needs Python 3, which is not installed yet.\n\nClick Install to get Apple’s free Command Line Tools (this includes Python 3). When it finishes, open Token Burn Tracker again." buttons {"Cancel","Install"} default button "Install" with title "Token Burn Tracker"' >/dev/null 2>&1; then
+    xcode-select --install >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
+echo "PY=$PY"
+
+# --- start server if not already up ---
+if ! curl -s --max-time 2 "http://localhost:$PORT/api/summary" >/dev/null 2>&1; then
+  echo "starting server"
+  ( cd "$RES" && TOKENBURN_DATA_DIR="$DATA" nohup "$PY" tracker.py >>"$DATA/server.log" 2>&1 & )
+fi
+
+# --- wait for readiness ---
+READY=""
+for i in $(seq 1 60); do
+  if curl -s --max-time 2 "http://localhost:$PORT/api/summary" >/dev/null 2>&1; then READY=1; break; fi
+  sleep 1
+done
+if [ -z "$READY" ]; then
+  say "Couldn’t start the Token Burn server.\nThe log is at: ~/Library/Application Support/TokenBurnTracker/server.log"
+  exit 1
+fi
+
+# --- open dashboard ---
+open "http://localhost:$PORT/"
+
+# --- desktop widget (optional; needs Übersicht) ---
+install_widget(){
+  W="$HOME/Library/Application Support/Übersicht/widgets/token-burn.widget"
+  mkdir -p "$W"
+  cp -f "$RES/widget/index.jsx" "$W/index.jsx"
+  /usr/bin/sed -i '' "s|__TRACKER_DIR__|$RES|g" "$W/index.jsx" 2>/dev/null || true
+  open "/Applications/Übersicht.app" 2>/dev/null || true
+}
+if [ -d "/Applications/Übersicht.app" ]; then
+  install_widget; note "Dashboard open and desktop widget added."
+elif command -v brew >/dev/null 2>&1; then
+  note "Setting up the desktop widget…"
+  brew install --cask ubersicht >>"$DATA/server.log" 2>&1 || true
+  if [ -d "/Applications/Übersicht.app" ]; then install_widget; note "Dashboard open and desktop widget added."; fi
+else
+  say "Your dashboard is open in the browser.\n\nThe optional desktop widget needs the free Übersicht app — download it from tracesof.net/uebersicht, then open Token Burn Tracker again to add the widget."
+fi
+echo "done"; exit 0
