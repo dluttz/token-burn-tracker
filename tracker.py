@@ -136,7 +136,7 @@ def force_check_update():
     return {"current": cur, "latest": latest, "outdated": outdated, "cmd": UPDATE_INSTALL_CMD}
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 7   # bumped: first-message titles captured longer, to power the sidebar-search "find this chat" button
+CACHE_VERSION = 8   # bumped: real chat titles now read per tool (Cowork metadata, Codex SQLite, Claude Code summary, custom title field)
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -195,17 +195,27 @@ def claude_entries(path, tool, file_date):
     entries, titles = [], {}
     tb = _empty_breakdown()   # input/cache/output split, summed across every usage record in this file
     last_ts = None
+    file_sid = None
     default_cwd = "Cowork sessions" if tool == "Cowork" else "?"
     try:
         with open(path, errors="ignore") as f:
             for line in f:
                 is_usage = '"usage"' in line
                 is_user = ('"role": "user"' in line) or ('"role":"user"' in line)
-                if not is_usage and not is_user:
+                is_summary = '"summary"' in line
+                if not is_usage and not is_user and not is_summary:
                     continue
                 try:
                     d = json.loads(line)
                 except Exception:
+                    continue
+                if file_sid is None and d.get("sessionId"):
+                    file_sid = d.get("sessionId")
+                if is_summary and not is_usage and not is_user:
+                    # Claude Code writes a session-summary line; use it as the title (better than first message).
+                    s = d.get("summary")
+                    if isinstance(s, str) and s.strip():
+                        titles[session_key(tool, d.get("sessionId") or file_sid, path)] = " ".join(s.split())[:160]
                     continue
                 msg = d.get("message")
                 if not isinstance(msg, dict):
@@ -288,6 +298,46 @@ def codex_entries(path, file_date, index_map):
         return ents, {sk: index_map.get(sid or "", "Codex session")}, _empty_breakdown()
     return [], {}, _empty_breakdown()
 
+def _sqlite_title_map(db):
+    """Best-effort id -> chat title from an unknown SQLite schema (newer Codex keeps titles in logs_*.sqlite)."""
+    out = {}
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db, uri=True, timeout=1.0)
+    except Exception:
+        return out
+    try:
+        cur = con.cursor()
+        tables = [r[0] for r in cur.execute("select name from sqlite_master where type='table'").fetchall()]
+        RANK = ["thread_name", "title", "summary", "name", "label"]   # prefer clearly-a-title columns
+        for t in tables:
+            try:
+                cols = [c[1] for c in cur.execute('PRAGMA table_info("%s")' % t).fetchall()]
+            except Exception:
+                continue
+            id_cols = [c for c in cols if re.search(r'(^|_)(id|uuid)$', c, re.I)
+                       or re.search(r'(session|conversation|thread|rollout)', c, re.I)]
+            title_cols = sorted([c for c in cols if c.lower() in RANK], key=lambda c: RANK.index(c.lower()))
+            if not id_cols or not title_cols:
+                continue
+            sel = ",".join('"%s"' % c for c in (id_cols + title_cols))
+            try:
+                rows = cur.execute('select %s from "%s"' % (sel, t)).fetchall()
+            except Exception:
+                continue
+            ni = len(id_cols)
+            for row in rows:
+                ids = [str(x) for x in row[:ni] if x not in (None, "")]
+                titles = [str(x).strip() for x in row[ni:] if isinstance(x, str) and x.strip()]
+                if ids and titles:
+                    for i in ids:
+                        out.setdefault(i, titles[0][:200])
+    except Exception:
+        pass
+    finally:
+        try: con.close()
+        except Exception: pass
+    return out
+
 def load_codex_index():
     m = {}
     try:
@@ -299,6 +349,12 @@ def load_codex_index():
                     continue
                 if d.get("id") and d.get("thread_name"):
                     m[d["id"]] = d["thread_name"]
+    except Exception:
+        pass
+    try:   # newer Codex stores chat titles in a SQLite db instead of session_index.jsonl
+        for db in sorted(glob.glob(HOME + "/.codex/*.sqlite")):
+            for k, v in _sqlite_title_map(db).items():
+                m.setdefault(k, v)
     except Exception:
         pass
     return m
@@ -373,28 +429,39 @@ def custom_entries(path, src, file_date):
         return [], {}, _empty_breakdown()
     sk = name + ":" + os.path.basename(path)
     proj = shorten(os.path.dirname(path)) if "/" in path else name
+    ttlkeys = set(src.get("titleKeys") or ["title", "name", "thread_name", "summary", "subject"])
+    ctitle = None
     by_date = defaultdict(int)
     try:
         with open(path, errors="ignore") as f:
             for line in deque(f, maxlen=20000):
                 line = line.strip()
-                if not line or not any(k in line for k in tkeys):
+                if not line:
+                    continue
+                has_tok = any(k in line for k in tkeys)
+                has_ttl = ctitle is None and any(k in line for k in ttlkeys)
+                if not has_tok and not has_ttl:
                     continue
                 try:
                     d = json.loads(line)
                 except Exception:
                     continue
-                tok = _find_token_sum(d, tkeys)
-                if tok <= 0:
-                    continue
-                dt = _ts_date(_find_first(d, tskeys)) or file_date
-                by_date[dt] += tok
+                if has_ttl:
+                    tv = _find_first(d, ttlkeys)
+                    if tv is not None and str(tv).strip():
+                        ctitle = " ".join(str(tv).split())[:160]
+                if has_tok:
+                    tok = _find_token_sum(d, tkeys)
+                    if tok <= 0:
+                        continue
+                    dt = _ts_date(_find_first(d, tskeys)) or file_date
+                    by_date[dt] += tok
     except Exception:
         pass
     ents = [[dt, name, src.get("model") or "?", proj, int(tok), sk, path] for dt, tok in by_date.items() if tok > 0]
     # Custom sources only declare which field(s) hold a token count, not which kind
     # (input/cache/output), so they don't contribute to the token breakdown split.
-    return ents, ({sk: os.path.basename(path)} if ents else {}), _empty_breakdown()
+    return ents, ({sk: (ctitle or os.path.basename(path))} if ents else {}), _empty_breakdown()
 
 # ---------- build ----------
 def _gather_files_uncached():
