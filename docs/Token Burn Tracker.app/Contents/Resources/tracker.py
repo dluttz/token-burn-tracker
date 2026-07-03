@@ -524,6 +524,40 @@ def shorten(p):
     parts = [x for x in p.rstrip("/").split("/") if x]
     return "/".join(parts[-2:]) if len(parts) >= 2 else (parts[-1] if parts else p)
 
+# ---- real chat titles + start times, read from each session's own metadata JSON ----
+# The desktop app stores a per-chat metadata file (local_<uuid>.json) with the exact title it shows in
+# its sidebar, plus createdAt/lastActivityAt. Reading it lets flagged chats show their real name + true
+# start time — matched to a session by the local_<uuid> in its transcript path.
+_AGENT_META = {"idx": {}, "ts": 0.0}
+def load_agent_meta():
+    idx = {}
+    base = HOME + "/Library/Application Support/Claude/local-agent-mode-sessions"
+    for mp in glob.glob(base + "/**/local_*.json", recursive=True):
+        m = re.search(r"(local_[0-9a-f-]+)\.json$", mp)
+        if not m:
+            continue
+        try:
+            d = json.load(open(mp, errors="ignore"))
+        except Exception:
+            continue
+        if not isinstance(d, dict):
+            continue
+        idx[m.group(1)] = {"title": (d.get("title") or "").strip(),
+                           "created": d.get("createdAt"), "last": d.get("lastActivityAt")}
+    return idx
+def agent_meta():
+    now = time.time()
+    if now - _AGENT_META["ts"] > 8 or not _AGENT_META["idx"]:
+        try:
+            _AGENT_META["idx"] = load_agent_meta() or _AGENT_META["idx"]
+        except Exception:
+            pass
+        _AGENT_META["ts"] = now
+    return _AGENT_META["idx"]
+def agent_meta_for(path):
+    m = re.search(r"(local_[0-9a-f-]+)", path or "")
+    return agent_meta().get(m.group(1)) if m else None
+
 def aggregate(entries, titles):
     day = defaultdict(lambda: defaultdict(int))
     day_total = defaultdict(int)
@@ -572,12 +606,21 @@ def aggregate(entries, titles):
     bySession = []
     for sk, v in sorted(sess.items(), key=lambda x: -x[1])[:30]:
         tl, sp = sess_meta.get(sk, ("?", "?"))
-        title = titles.get(sk) or sp or "(session)"
         fp = sess_file.get(sk, "")
-        when = ""   # last-active time (transcript file mtime) so the fix card can show a precise time, like the live box
-        if fp:
+        meta = agent_meta_for(fp)   # real sidebar title + start time from the app's own per-chat metadata (Cowork)
+        title = (meta and meta.get("title")) or titles.get(sk) or sp or "(session)"
+        when = ""
+        if meta and meta.get("created"):   # authoritative chat-start time (epoch ms) — stable, never bumps on reopen
             try:
-                when = datetime.datetime.fromtimestamp(os.path.getmtime(fp)).isoformat(timespec="minutes")
+                when = datetime.datetime.fromtimestamp(meta["created"] / 1000).isoformat(timespec="minutes")
+            except Exception:
+                when = ""
+        if not when and fp:                # fallback for tools without metadata (Claude Code / Codex)
+            try:
+                st = os.stat(fp)
+                bt = getattr(st, "st_birthtime", None)
+                ts0 = min(bt, st.st_mtime) if bt else st.st_mtime
+                when = datetime.datetime.fromtimestamp(ts0).isoformat(timespec="minutes")
             except Exception:
                 when = ""
         bySession.append([title, sp, tl, v, fp, sess_date.get(sk, ""), when])
@@ -606,6 +649,12 @@ def quick_title(path, kind, idx):
             return idx.get(sid or "", "Codex session")
         except Exception:
             return "Codex session"
+    try:
+        meta = agent_meta_for(path)
+        if meta and meta.get("title"):
+            return meta["title"]
+    except Exception:
+        pass
     try:
         with open(path, errors="ignore") as f:
             for i, line in enumerate(f):
