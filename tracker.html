@@ -194,6 +194,9 @@
   .fixcmd{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
   .fixcmd-label{color:var(--muted);font-size:12.5px}
   .fixcmd-code{font-family:ui-monospace,Menlo,monospace;background:rgba(var(--accent-rgb),.12);color:var(--ink);padding:3px 9px;border-radius:7px;font-size:13px;font-weight:600}
+  .fixrems{margin-top:11px;display:flex;flex-direction:column;gap:8px}
+  .fixrem{font-size:12.8px;line-height:1.55}
+  .fixrem .fixbtn{margin-left:8px;padding:4px 11px;font-size:11.5px;vertical-align:middle}
 
   /* waste */
   .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:11px;padding:13px 15px;margin:10px 0}
@@ -984,21 +987,6 @@ function renderTop10(days){
 // ---- token breakdown (input / cache write / cache read / output) ----
 // ---- data-driven "suggested fixes" from the token mix (universal; personalized by each user's own %) ----
 function copyFixCmd(btn,text){ try{ navigator.clipboard.writeText(text); const o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(()=>{btn.textContent=o;},1500);}catch(e){ btn.textContent="Copy failed"; } }
-// Build a distinctive phrase from a chat's opening message. The apps' sidebar search matches message
-// TEXT (not just the title), so pasting this verbatim jumps straight to that chat — whatever it's titled.
-// We drop a bare greeting so the specific words dominate the (fuzzy) search ranking.
-function findPhrase(t){
-  let s=String(t||"").replace(/\s+/g,' ').trim();
-  s=s.replace(/^(hi|hey|hello|ok|okay|so|yo|thanks|thank you|please)[\s,.:!-]+/i,'');
-  return s.slice(0,120).trim();
-}
-function copyFind(btn){
-  const t=btn.getAttribute('data-find')||'';
-  try{ navigator.clipboard.writeText(t); const o=btn.getAttribute('data-label')||btn.textContent;
-    btn.setAttribute('data-label',o); btn.textContent="Copied ✓ — paste in sidebar search"; btn.classList.add('ok');
-    setTimeout(()=>{btn.textContent=o;btn.classList.remove('ok');},2400);
-  }catch(e){ btn.textContent="Copy failed"; }
-}
 // A short date label matching how the apps group chats (Today / Yesterday / "Jun 30").
 function shortDate(iso){
   if(!iso) return "";
@@ -1011,21 +999,19 @@ function shortDate(iso){
   const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(+p[1])-1];
   return m ? `${m} ${(+p[2])}` : "";
 }
-// Top up-to-3 heaviest chats — tool (LLM) + date + opening line, each with a "find it" button that
-// copies a distinctive phrase to paste into the app's sidebar search (which matches message text),
-// so you land on the exact chat whatever the app auto-titled it.
+// Top up-to-3 heaviest chats — tool (LLM) + date + how the chat opened — so you can spot each one in
+// your sidebar's date groups. (These apps auto-title chats with their own model and don't expose that
+// title or a deep-link on disk, so we identify each chat by its date + opening line.)
 function chatListHTML(sessions){
   const list=(sessions||[]).filter(s=>s && s[0]).slice(0,3);
   if(!list.length) return "";
   const rows=list.map(s=>{
     const title=String(s[0]||"untitled");
-    const short=title.length>46 ? title.slice(0,46)+"…" : title;
+    const short=title.length>72 ? title.slice(0,72)+"…" : title;
     const tool=String(s[2]||"?");
     const dt=shortDate(s[5]);
     const c=(typeof COLOR!=="undefined" && COLOR[tool]) || "#999";
-    const phrase=findPhrase(title);
-    const btn=phrase ? `<button class="fixfind" data-find="${esc(phrase)}" onclick="copyFind(this)" title="Copies a distinctive phrase from this chat. Paste it into your app's sidebar search box to jump straight to this chat — the search matches message text, so it finds the chat whatever the app titled it.">Copy text to find it</button>` : '';
-    return `<div class="fixchat"><span class="fixdot" style="background:${c}"></span><b>${esc(tool)}</b>${dt?`<span class="fixchat-d">· ${dt}</span>`:''}<span class="fixchat-t">“${esc(short)}”</span>${btn}</div>`;
+    return `<div class="fixchat"><span class="fixdot" style="background:${c}"></span><b>${esc(tool)}</b>${dt?`<span class="fixchat-d">· ${dt}</span>`:''}<span class="fixchat-t">“${esc(short)}”</span></div>`;
   }).join("");
   return `<div class="fixchats">${rows}</div>`;
 }
@@ -1040,10 +1026,21 @@ function renderTokenFixes(bd, sessions){
   const cards=[];
   if(pct(cr)>=40){
     const list=chatListHTML(sessions);
-    const cmd = `<div class="fixcmd"><span class="fixcmd-label">In that chat, type:</span><code class="fixcmd-code">/compact</code><button class="fixbtn" onclick="copyFixCmd(this,'/compact')" title="Copies the text “/compact” to your clipboard so you can paste it into that chat">Copy “/compact”</button></div>`;
+    // Remedy is tool-specific: Cowork has no /compact command (start a fresh chat); Claude Code has /compact; Codex resets via a new session.
+    const shown=(sessions||[]).filter(s=>s&&s[0]).slice(0,3);
+    const tools=[...new Set(shown.map(s=>String(s[2]||"")))];
+    const rem=[];
+    if(tools.some(t=>/cowork/i.test(t)))
+      rem.push(`<div class="fixrem"><b>Cowork:</b> start a <b>new chat</b> when you don’t need the earlier history — a fresh chat drops the re-reading back to zero. <span style="color:var(--muted)">(Cowork has no <code class="fixcmd-code">/compact</code> command.)</span></div>`);
+    if(tools.some(t=>/claude\s*code/i.test(t)))
+      rem.push(`<div class="fixrem"><b>Claude Code:</b> run <code class="fixcmd-code">/compact</code> to shrink the thread in place, or <code class="fixcmd-code">/clear</code> for a clean slate. <button class="fixbtn" onclick="copyFixCmd(this,'/compact')" title="Copies “/compact” so you can paste it into a Claude Code session">Copy “/compact”</button></div>`);
+    if(tools.some(t=>/codex/i.test(t)))
+      rem.push(`<div class="fixrem"><b>Codex:</b> start a <b>new session</b> to reset the context.</div>`);
+    if(!rem.length)
+      rem.push(`<div class="fixrem">Start a <b>new chat</b> when you don’t need the earlier history — it drops the re-reading back to zero.</div>`);
     cards.push(box(`Your biggest chats keep re-reading themselves (${pct(cr).toFixed(0)}%)`,
-      "Each one re-sends its whole history every turn. Hit “Copy text to find it”, paste into your app’s sidebar search to jump straight to that chat, then run <code class=\"fixcmd-code\">/compact</code> in it (or start a fresh thread):",
-      `${list}${cmd}`));
+      "Each one re-sends its whole history every turn. Spot them in your sidebar by date + opening line, then stop growing one giant thread:",
+      `${list}<div class="fixrems">${rem.join("")}</div>`));
   }
   if(pct(out)>=25){
     cards.push(box(`Long responses (${pct(out).toFixed(0)}%)`,
