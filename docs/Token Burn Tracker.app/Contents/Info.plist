@@ -5,8 +5,8 @@
   <key>CFBundleName</key><string>Token Burn Tracker</string>
   <key>CFBundleDisplayName</key><string>Token Burn Tracker</string>
   <key>CFBundleIdentifier</key><string>com.dluttz.tokenburntracker</string>
-  <key>CFBundleVersion</key><string>1.9.0</string>
-  <key>CFBundleShortVersionString</key><string>1.9.0</string>
+  <key>CFBundleVersion</key><string>2.0.0</string>
+  <key>CFBundleShortVersionString</key><string>2.0.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>TokenBurnTracker</string>
   <key>CFBundleIconFile</key><string>app</string>

@@ -34,3 +34,4 @@ probe*.txt
 # Personal desktop-layout script — references a sibling widget that isn't part of
 # this repo and hardcodes one screen's widget positions. Not needed to run the app.
 apply-layout.command
+tracker.html.prev

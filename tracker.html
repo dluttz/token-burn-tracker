@@ -5,183 +5,234 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Token Burn — live</title>
 <style>
+  /* ============ tokens ============ */
   :root{
     --bg:#fdfcf8; --ink:#1a1a17; --muted:#6b6a63; --rule:#e6e3da; --panel:#fff;
-    --claude:#d4663a; --cowork:#6e56cf; --codex:#10a37f; --accent:#9c2a2c;
+    --claude:#d4663a; --cowork:#6e56cf; --codex:#10a37f;
+    --accent:#9c2a2c; --accent-rgb:156,42,44;
+    --hover:#f6f4ec;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--bg);color:var(--ink);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:940px;margin:0 auto;padding:30px 24px 72px}
-  h1{font-weight:600;font-size:25px;margin:0;letter-spacing:-.01em}
-  .sub{color:var(--muted);font-size:13px;margin:3px 0 0;line-height:1.5}
-  .top{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
-  .btn{font:inherit;font-size:13px;border:1px solid var(--rule);background:#fff;color:var(--ink);padding:7px 13px;border-radius:8px;cursor:pointer}
-  .btn:hover{border-color:#c4bfb0}
+  html{color-scheme:light;scroll-behavior:smooth}
+  html,body{margin:0;background-color:var(--bg);color:var(--ink);overscroll-behavior:none;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;letter-spacing:-.005em}
+
+  /* ============ sidebar ============ */
+  .sidebar{position:fixed;top:0;left:0;bottom:0;width:216px;padding:22px 14px 16px;z-index:40;overflow-y:auto;
+    background:var(--bg);border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px}
+  .sidebar .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13.5px;letter-spacing:-.01em;margin:0 6px 20px}
+  .sidebar .brand .logo{width:26px;height:26px;border-radius:7px;background:var(--accent);flex:none;
+    display:flex;align-items:center;justify-content:center;color:#fff}
+  .sidebar .nav{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px;color:var(--muted);
+    font-size:13.5px;font-weight:500;cursor:pointer;text-decoration:none}
+  .sidebar .nav svg{width:16px;height:16px;flex:none;opacity:.8}
+  .sidebar .nav:hover{background:var(--hover);color:var(--ink)}
+  .sidebar .nav.on{background:var(--ink);color:var(--bg);font-weight:600}
+  .sidebar .nav.on svg{opacity:1}
+  .navfoot{margin-top:auto;display:flex;align-items:center;gap:7px;padding:14px 10px 2px;color:var(--muted);font-size:10.5px;line-height:1.5}
+  .navfoot .pulse{width:6px;height:6px}
+  .themeswitch{display:flex;gap:3px;margin:14px 6px 2px;background:rgba(26,26,23,.05);border-radius:9px;padding:3px}
+  .themeswitch button{flex:1;font:inherit;font-size:11.5px;font-weight:600;border:none;background:transparent;color:var(--muted);padding:5px 4px;border-radius:7px;cursor:pointer}
+  .themeswitch button.on{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--rule)}
+  .accentpick{margin:10px 6px 0}
+  .accentpick .aplabel{display:block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .accentpick .arow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .accentpick .asw,.accentpick .psw{width:17px;height:17px;border-radius:50%;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
+  .accentpick .asw.on,.accentpick .psw.on{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ink)}
+  .accentpick input[type=color]{width:19px;height:19px;padding:0;border:1px solid rgba(0,0,0,.18);border-radius:50%;background:none;cursor:pointer}
+  .customizebtn{display:flex;align-items:center;gap:10px;margin:8px 0 0;padding:8px 12px;border-radius:9px;border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:500;cursor:pointer;text-align:left}
+  .customizebtn svg{width:16px;height:16px;opacity:.8;flex:none}
+  .customizebtn:hover{background:var(--hover);color:var(--ink)}
+
+  /* ============ layout / header ============ */
+  .wrap{max-width:1180px;margin:0 0 0 217px;padding:28px 44px 90px}
+  .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{font-weight:700;font-size:20px;margin:0;letter-spacing:-.02em;display:none}
+  .sub{color:var(--muted);font-size:13px;margin:0;line-height:1.5}
+  .btn{font:inherit;font-size:13px;font-weight:500;border:1px solid var(--rule);background:var(--panel);color:var(--ink);padding:7px 14px;border-radius:9px;cursor:pointer}
+  .btn:hover{background:var(--hover)}
   .btn.icon{padding:5px 11px;font-size:15px;line-height:1}
+  .demopill{font-size:11.5px;font-weight:600;color:#9a6a1e;background:#fbf6ee;border:1px solid #ead9c0;border-radius:999px;padding:4px 12px}
 
-  /* period cards */
-  .periods{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:22px 0 6px}
-  .pcard{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:13px 15px}
-  .pcard .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-  .pcard .v{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:4px;line-height:1.1}
-  .pcard.accent{background:rgba(var(--accent-rgb),0.05);border-color:rgba(var(--accent-rgb),0.22)}
-  @media(max-width:760px){.periods{grid-template-columns:repeat(2,1fr)}}
+  /* ============ hero ============ */
+  .hero{display:flex;gap:56px;align-items:flex-start;margin:30px 0 6px}
+  .hero-main{flex:1;min-width:0}
+  .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .hero-num{display:flex;align-items:baseline;gap:12px;margin-top:10px}
+  .hero-num .v{font-size:76px;font-weight:700;letter-spacing:-.04em;line-height:.95;font-variant-numeric:tabular-nums}
+  .hero-num .unit{font-size:16px;color:var(--muted);font-weight:500}
+  .hero-live{display:inline-flex;align-items:center;gap:8px;margin-top:18px;color:var(--accent);font-size:13px;font-weight:650;
+    background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.22);border-radius:999px;padding:6px 14px}
+  .spark{margin-top:24px}
+  .spark svg{display:block;width:340px;max-width:100%;height:60px;overflow:visible}
+  .sparklbl{font-size:11px;color:var(--muted);margin-top:6px}
+  .hero-side{width:260px;flex:none;padding-top:4px}
+  .prow{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--rule)}
+  .prow span{color:var(--muted);font-size:13px}
+  .prow b{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums}
+  .prow.last{border-bottom:none}
+  .splitbar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#f0eee6;margin-top:14px}
+  .splitbar span{height:100%}
+  .splitleg{display:flex;flex-direction:column;gap:5px;margin-top:10px}
+  .slg{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .slg b{margin-left:auto;color:var(--ink);font-weight:650;font-variant-numeric:tabular-nums}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+  @media(max-width:1020px){.hero{flex-direction:column;gap:26px}.hero-side{width:100%;max-width:340px}}
 
-  .warnbar{margin:12px 0 0;background:#fbf0e6;border:1px solid #ead0b0;color:#8a4b13;border-radius:10px;padding:10px 13px;font-size:12.5px;line-height:1.5}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
-  .chip{display:flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--rule);border-radius:20px;padding:4px 11px;background:#fff}
-  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .warnbar{margin:14px 0 0;background:#fbf6ee;border:1px solid #ead9c0;color:#8a4b13;border-radius:12px;padding:11px 14px;font-size:12.5px;line-height:1.5}
 
-  /* hover help "?" tooltips */
-  .help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--rule);color:var(--muted);font-size:10px;font-weight:700;cursor:help;position:relative;margin-left:6px;vertical-align:middle;background:#fff;flex:none;text-transform:none;letter-spacing:normal}
-  .help:hover{border-color:var(--accent);color:var(--accent)}
-  .help::after{content:attr(data-tip);position:absolute;left:50%;top:150%;transform:translateX(-50%);width:max-content;max-width:260px;background:#1f1f1c;color:#fff;font-size:12px;font-weight:400;line-height:1.5;padding:9px 11px;border-radius:8px;text-align:left;text-transform:none;letter-spacing:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.22)}
-  .help::before{content:"";position:absolute;left:50%;top:140%;transform:translateX(-50%);border:5px solid transparent;border-bottom-color:#1f1f1c;opacity:0;visibility:hidden;transition:opacity .12s;z-index:61}
-  .help:hover::after,.help:hover::before{opacity:1;visibility:visible}
+  /* ============ help tooltips (simplified) ============ */
+  .help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--rule);
+    color:var(--muted);font-size:10px;font-weight:700;cursor:help;position:relative;margin-left:6px;vertical-align:middle;background:transparent;
+    flex:none;text-transform:none;letter-spacing:normal}
+  .help:hover{border-color:var(--muted);color:var(--ink)}
+  .help::after{content:attr(data-tip);position:absolute;left:50%;top:150%;transform:translateX(-50%);width:max-content;max-width:260px;
+    background:#1f1e1b;color:#fdfcf8;font-size:12px;font-weight:400;line-height:1.5;padding:8px 11px;border-radius:8px;text-align:left;
+    text-transform:none;letter-spacing:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s;transition-delay:0s;z-index:60}
+  .help:hover::after{opacity:1;visibility:visible;transition-delay:.3s}
   .help.r::after{left:auto;right:-4px;transform:none}
-  .help.r::before{left:auto;right:3px;transform:none}
+  body.is-scrolling .help::after{opacity:0!important;visibility:hidden!important;transition:none!important}
 
-  .panel{margin:30px 0 6px}
-  .panel h2{font-weight:600;font-size:15px;margin:0 0 3px}
-  .panel .cap{color:var(--muted);font-size:12.5px;margin:0 0 12px;line-height:1.5}
-  .panelhead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  /* ============ panels ============ */
+  .panel{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:24px 26px;margin:22px 0;scroll-margin-top:24px}
+  .panel h2{font-weight:650;font-size:15.5px;margin:0 0 4px;letter-spacing:-.01em}
+  .panel .cap{color:var(--muted);font-size:12.5px;margin:0 0 16px;line-height:1.55}
+  .panelhead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
   .panelhead h2{margin:0}
+  .liveat{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  .livemeta{margin-left:auto;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;text-align:right}
   .calnav{margin-left:auto;display:flex;align-items:center;gap:8px}
-  .rangebtns{margin-left:auto;display:inline-flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
-  .rangebtns button{font:inherit;font-size:12px;font-weight:600;border:none;background:#fff;color:var(--muted);padding:5px 12px;cursor:pointer;border-left:1px solid var(--rule)}
+  #cal-title{font-size:13.5px;font-weight:600;min-width:130px;text-align:center;font-variant-numeric:tabular-nums}
+  .rangebtns{margin-left:auto;display:inline-flex;border:1px solid var(--rule);border-radius:9px;overflow:hidden}
+  .rangebtns button{font:inherit;font-size:12px;font-weight:600;border:none;background:transparent;color:var(--muted);padding:6px 13px;cursor:pointer;border-left:1px solid var(--rule)}
   .rangebtns button:first-child{border-left:none}
-  .rangebtns button:hover{background:#f3f4f2}
-  .rangebtns button.on{background:var(--accent);color:#fff}
-  #cal-title{font-size:14px;font-weight:600;min-width:140px;text-align:center}
+  .rangebtns button:hover{background:var(--hover)}
+  .rangebtns button.on{background:var(--ink);color:var(--bg)}
 
-  /* calendar */
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
-  .cal-head{font-size:11px;font-weight:600;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em;padding-bottom:2px}
-  .cell{min-height:62px;border:1px solid var(--rule);border-radius:9px;padding:6px 8px;position:relative;background:#fafbf9;display:flex;flex-direction:column}
-  .cell .d{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600}
-  .cell .t{margin-top:auto;font-size:13px;font-weight:650;font-variant-numeric:tabular-nums}
-  .cell.dark .d{color:rgba(255,255,255,.85)}
-  .cell.dark .t{color:#fff}
-  .cell.today{outline:2px solid var(--accent);outline-offset:-1px}
-  .cell.empty{border:none;background:transparent}
-  .cell.future{opacity:.45}
-  .callegend{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-top:10px}
-  .callegend .sw{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid var(--rule)}
-
-  svg{display:block;width:100%;height:auto;overflow:visible}
-  text{fill:var(--ink);font-family:inherit}
-  .axislabel,.ticklbl{fill:var(--muted);font-size:11px}
-  .tick line{stroke:var(--rule)}
-  .legend{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:11.5px;margin-top:8px}
-
-  table{border-collapse:collapse;width:100%;font-size:13px}
-  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
-  th{font-weight:600;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
-  td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
-  td.rank{color:var(--muted);width:24px}
-  .projrow{display:grid;grid-template-columns:230px 1fr 86px;gap:10px;align-items:center;margin:7px 0}
-  .projname{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .bar{height:16px;border-radius:3px;display:flex;overflow:hidden;background:#f0eee6}
-  .bar span{height:100%}
-  .projtok{font-variant-numeric:tabular-nums;font-weight:600;font-size:12.5px;text-align:right}
-  .empty2,.loading{color:var(--muted);font-size:14px;padding:40px 0;text-align:center;border:1px dashed var(--rule);border-radius:10px}
-  .spin{display:inline-block;width:15px;height:15px;border:2px solid #cfd4dc;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:7px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .foot{color:var(--muted);font-size:11.5px;margin-top:36px;border-top:1px solid var(--rule);padding-top:12px;line-height:1.6}
-  .hidden{display:none}
-
-  /* running now — single merged list */
-  .liverow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--rule);font-size:13.5px}
+  /* ============ running now ============ */
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;animation:pulse 1.9s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.4)}70%{box-shadow:0 0 0 7px rgba(var(--accent-rgb),0)}100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}}
+  .liverow{display:flex;align-items:center;gap:10px;padding:13px 2px;border-bottom:1px solid var(--rule);font-size:14px}
   .liverow:last-child{border-bottom:none}
-  .liverow .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .liverow .meta{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums;padding-left:10px}
-  .livekind{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#8a8a80;border:1px solid var(--rule);border-radius:5px;padding:1px 5px;flex:none}
-  .burnchip{flex:none;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);background:rgba(var(--accent-rgb),0.10);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:20px;padding:2px 9px}
+  .liverow .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .liverow .meta{color:var(--muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none;padding-left:6px}
+  .livekind{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border:1px solid var(--rule);border-radius:5px;padding:1px 6px;flex:none}
+  .burnchip{flex:none;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent)}
+  .livenote,.anote{color:var(--muted);font-size:13px;padding:10px 0}
+  .idlerow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;margin-top:12px;padding-top:11px;border-top:1px dashed var(--rule)}
+  .leftoverbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:12px 14px;background:rgba(var(--accent-rgb),.05);border:1px solid rgba(var(--accent-rgb),.2);border-radius:12px}
+  .leftoverbar .lotext{font-size:12.5px;color:var(--accent);flex:1;min-width:240px;line-height:1.45}
 
-  /* agent activity / sub-agents */
-  .arun{border:1px solid var(--rule);border-radius:12px;padding:13px 15px;margin:11px 0;background:var(--panel)}
-  .arun .ahead{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  /* ============ agents ============ */
+  .arun{border:1px solid var(--rule);border-radius:12px;margin:10px 0;background:var(--panel);padding:0;cursor:pointer;overflow:hidden}
+  .arun .ahead{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:13px 15px}
+  .arun .ahead:hover{background:var(--hover)}
+  .arun.open .ahead{border-bottom:1px solid var(--rule)}
   .arun .atitle{font-weight:650;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
   a.alink{color:var(--ink);text-decoration:none}
   a.alink:hover{color:var(--accent);text-decoration:underline}
   .astatus{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:5px;padding:1px 7px}
-  .astatus.active{color:var(--accent);background:rgba(var(--accent-rgb),0.10);border:1px solid rgba(var(--accent-rgb),0.22)}
-  .astatus.done{color:#5a5a52;background:#f0eee6;border:1px solid var(--rule)}
+  .astatus.active{color:var(--accent);background:rgba(var(--accent-rgb),.08);border:1px solid rgba(var(--accent-rgb),.2)}
+  .astatus.done{color:var(--muted);background:var(--hover);border:1px solid var(--rule)}
   .astatus.idle{color:#9a6a1e;background:#fbf6ee;border:1px solid #ead9c0}
-  .ameta{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
-  .achips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0}
-  .achip{font-size:11.5px;border:1px solid var(--rule);border-radius:20px;padding:2px 9px;background:#fafbf9;font-variant-numeric:tabular-nums}
-  .achip b{font-weight:650}
+  .ameta{color:var(--muted);font-size:12px;white-space:nowrap}
+  .achev{flex:none;width:16px;height:16px;color:var(--muted);transition:transform .15s;display:flex;align-items:center;justify-content:center}
+  .arun.open .achev{transform:rotate(90deg);color:var(--accent)}
+  .asummary{display:flex;align-items:center;gap:5px;margin-left:auto;flex:none}
+  .acount{display:flex;align-items:center;gap:3px;font-size:11.5px;color:var(--muted);border:1px solid var(--rule);border-radius:999px;padding:2px 9px;background:transparent;font-variant-numeric:tabular-nums;cursor:help;white-space:nowrap}
+  .acount b{font-weight:650;color:var(--ink)}
+  .adetail{display:none;padding:13px 15px 15px;cursor:default}
+  .arun.open .adetail{display:block}
+  .adetail-open{margin:0 0 12px;padding-bottom:11px;border-bottom:1px dashed var(--rule);font-size:12.5px}
+  .adetail-open .alink{font-weight:650}
+  .achips{display:flex;gap:6px;flex-wrap:wrap}
+  .achip{font-size:11.5px;border:1px solid var(--rule);border-radius:999px;padding:2px 9px;background:transparent;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap;flex:none}
+  .achip b{font-weight:650;color:var(--ink)}
   .asub{margin-top:10px;border-top:1px dashed var(--rule);padding-top:9px}
   .asub .salabel{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
   .asub .sa{display:flex;gap:7px;font-size:12.5px;margin-top:5px;line-height:1.45}
   .asub .sa .saty{flex:none;color:var(--cowork);font-weight:700}
-  .afeed{margin-top:10px;font-size:12px;color:#6b6a63;line-height:1.7}
-  /* collapsed-by-default agent rows: click .ahead to expand .adetail */
-  .arun{padding:0;cursor:pointer}
-  .arun .ahead{padding:13px 15px;gap:9px}
-  .arun .ahead:hover{background:rgba(var(--accent-rgb),0.04)}
-  .arun.open .ahead{border-bottom:1px solid var(--rule)}
-  .achev{flex:none;width:16px;height:16px;color:var(--muted);transition:transform .15s;display:flex;align-items:center;justify-content:center}
-  .arun.open .achev{transform:rotate(90deg);color:var(--accent)}
-  .asummary{display:flex;align-items:center;gap:5px;margin-left:auto;flex:none}
-  .acount{display:flex;align-items:center;gap:3px;font-size:11.5px;color:var(--muted);border:1px solid var(--rule);border-radius:20px;padding:2px 9px;background:#fafbf9;font-variant-numeric:tabular-nums;cursor:help;white-space:nowrap}
-  .acount b{font-weight:650;color:var(--ink)}
-  .adetail{display:none;padding:12px 15px 14px;cursor:default}
-  .arun.open .adetail{display:block}
-  .adetail-open{margin:0 0 12px;padding-bottom:11px;border-bottom:1px dashed var(--rule);font-size:12.5px}
-  .adetail-open .alink{font-weight:650}
-  .anote{color:var(--muted);font-size:13px;padding:10px 0}
-  .livenote{color:var(--muted);font-size:13px;padding:10px 0}
-  .idlerow{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px;margin-top:12px;padding-top:11px;border-top:1px dashed var(--rule)}
-  .leftoverbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:11px;padding:11px 13px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:10px}
-  .leftoverbar .lotext{font-size:12.5px;color:var(--accent);flex:1;min-width:240px;line-height:1.45}
-  .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.9s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.45)}70%{box-shadow:0 0 0 7px rgba(var(--accent-rgb),0)}100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}}
-  /* live system + burn strip */
-  .livestrip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 16px}
-  @media(max-width:760px){.livestrip{grid-template-columns:repeat(2,1fr)}}
-  .lstat{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:9px 12px}
-  .lstat .lk{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-  .lstat .lv{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.15}
-  .lstat .lsub{font-size:11px;color:var(--muted);margin-top:1px}
-  .lstat.fire{background:rgba(var(--accent-rgb),0.06);border-color:rgba(var(--accent-rgb),0.22)}
-  .lstat.fire .lv{color:var(--accent)}
+  .afeed{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.7}
 
-  /* today highlight in calendar */
-  .cell.today{outline:3px solid #e08a2b;outline-offset:-1px;box-shadow:0 0 0 4px rgba(224,138,43,.18)}
-  .cell.today .d{color:#e08a2b;font-weight:800}
-  .cell.today.dark .d{color:#ffd9a8}
-  .todaytag{position:absolute;top:5px;right:6px;font-size:8.5px;font-weight:800;letter-spacing:.05em;color:#fff;background:#e08a2b;border-radius:4px;padding:1px 4px}
+  /* ============ calendar ============ */
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+  .cal-head{font-size:11px;font-weight:600;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em;padding-bottom:2px}
+  .cell{min-height:66px;border:1px solid var(--rule);border-radius:10px;padding:7px 9px;position:relative;background:transparent;display:flex;flex-direction:column}
+  .cell .d{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:600}
+  .cell .t{margin-top:auto;font-size:13px;font-weight:650;font-variant-numeric:tabular-nums}
+  .cell.heat1,.sw.heat1{background:rgba(var(--accent-rgb),.06)}
+  .cell.heat2,.sw.heat2{background:rgba(var(--accent-rgb),.13)}
+  .cell.heat3,.sw.heat3{background:rgba(var(--accent-rgb),.22)}
+  .cell.heat4,.sw.heat4{background:rgba(var(--accent-rgb),.34)}
+  .cell.heat1 .t,.cell.heat2 .t,.cell.heat3 .t,.cell.heat4 .t{color:var(--accent)}
+  .cell.heat3 .t,.cell.heat4 .t{font-weight:700}
+  .cell.today{outline:2px solid var(--accent);outline-offset:-1px}
+  .cell.today .d{color:var(--accent);font-weight:700}
+  .todaytag{position:absolute;top:6px;right:7px;font-size:8.5px;font-weight:800;letter-spacing:.05em;color:#fff;background:var(--accent);border-radius:4px;padding:1px 4px}
+  .cell.empty{border:none;background:transparent}
+  .cell.future{opacity:.45}
+  .callegend{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-top:12px}
+  .callegend .sw{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid var(--rule)}
 
-  /* efficiency */
-  .sugs{display:flex;flex-direction:column;gap:9px}
-  .sug{display:flex;gap:11px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.5}
+  /* ============ charts ============ */
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  text{fill:var(--ink);font-family:inherit}
+  .axislabel,.ticklbl{fill:var(--muted);font-size:11px}
+  .tick line{stroke:var(--rule)}
+  .legend{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:11.5px;margin-top:10px}
+  #ts-svg{cursor:crosshair}
+  #ts-hover{pointer-events:none}
+  .ts-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.5}
+  .charttip{position:absolute;pointer-events:none;z-index:40;background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:0 6px 20px rgba(26,26,23,.1);padding:8px 10px;font-size:12px;min-width:132px}
+  .charttip .cthd{font-weight:700;margin-bottom:5px;font-size:11.5px}
+  .charttip .ctrow{display:flex;align-items:center;gap:6px;margin:3px 0;white-space:nowrap}
+  .charttip .ctrow b{margin-left:auto;font-variant-numeric:tabular-nums}
+  .charttip .cdot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+
+  /* ============ tables / projects ============ */
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  td.num{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+  td.rank{color:var(--muted);width:24px;font-variant-numeric:tabular-nums}
+  .projrow{display:grid;grid-template-columns:240px 1fr 90px;gap:12px;align-items:center;margin:10px 0}
+  .projname{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar{height:10px;border-radius:5px;display:flex;overflow:hidden;background:#f0eee6}
+  .bar span{height:100%}
+  .projtok{font-variant-numeric:tabular-nums;font-weight:600;font-size:12.5px;text-align:right}
+  .empty2,.loading{color:var(--muted);font-size:14px;padding:44px 0;text-align:center;border:1px dashed var(--rule);border-radius:12px;margin-top:22px}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--rule);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:38px;border-top:1px solid var(--rule);padding-top:14px;line-height:1.6}
+  .hidden{display:none}
+
+  /* ============ efficiency / breakdown / fixes ============ */
+  .sugs{display:flex;flex-direction:column;gap:10px}
+  .sug{display:flex;gap:12px;background:rgba(var(--accent-rgb),.04);border:1px solid rgba(var(--accent-rgb),.18);border-radius:12px;padding:13px 15px;font-size:13px;line-height:1.55}
   .sug .rank{flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
-  .sug .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);margin-bottom:2px}
-  .revealbtn{margin-top:9px;font:inherit;font-size:12px;font-weight:600;border:1px solid rgba(var(--accent-rgb),0.22);background:#fff;color:var(--accent);padding:5px 11px;border-radius:7px;cursor:pointer}
-  .revealbtn:hover{background:#eef6ef}
+  .sug .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:2px}
+  .revealbtn{margin-top:10px;font:inherit;font-size:12px;font-weight:600;border:1px solid rgba(var(--accent-rgb),.25);background:transparent;color:var(--accent);padding:5px 12px;border-radius:8px;cursor:pointer}
+  .revealbtn:hover{background:rgba(var(--accent-rgb),.06)}
   .revealbtn.open{background:var(--accent);color:#fff;border-color:var(--accent)}
-  .revealbox{margin-top:9px;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:11px 13px;font-size:12.5px;line-height:1.55;color:#4a4a44}
+  .revealbox{margin-top:10px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.55;color:var(--muted)}
   .revealbox div{margin:5px 0}
   .revealbox div:first-child{margin-top:0}
-  .promptguide{margin-top:16px;border:1px solid var(--rule);border-radius:11px;overflow:hidden}
+  .promptguide{margin-top:16px;border:1px solid var(--rule);border-radius:12px;overflow:hidden}
   .promptguide table{font-size:12.5px}
   .promptguide td,.promptguide th{padding:9px 12px}
   .promptguide tr:last-child td{border-bottom:none}
-  .subhd{font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:20px 0 11px;padding-top:15px;border-top:1px dashed var(--rule);display:flex;align-items:center}
+  .subhd{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:22px 0 12px;padding-top:18px;border-top:1px dashed var(--rule);display:flex;align-items:center}
   .effactions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
-
-  /* token breakdown */
-  .tbrows{display:flex;flex-direction:column;gap:12px}
-  .tbrow .tblabel{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:600;margin-bottom:5px}
-  .tbrow .tbpct{color:var(--muted);font-weight:500;font-size:12px}
+  .tbrows{display:flex;flex-direction:column;gap:14px}
+  .tbrow .tblabel{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:600;margin-bottom:6px}
+  .tbrow .tbpct{color:var(--muted);font-weight:500;font-size:12px;font-variant-numeric:tabular-nums}
   .tbrow .tbval{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:650}
-  .tbtrack{height:14px;border-radius:7px;background:#f0eee6;overflow:hidden}
-  .tbfill{height:100%;background:var(--accent);border-radius:7px 0 0 7px;transition:width .3s}
-  .tbtip{margin-top:14px;display:flex;gap:10px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.5}
-  .tbtip .tbtag{flex:none;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent)}
+  .tbtrack{height:10px;border-radius:5px;background:#f0eee6;overflow:hidden}
+  .tbfill{height:100%;background:var(--accent);border-radius:5px 0 0 5px;transition:width .3s}
+  .tbtip{margin-top:14px;display:flex;gap:10px;background:rgba(var(--accent-rgb),.04);border:1px solid rgba(var(--accent-rgb),.18);border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.55}
+  .tbtip .tbtag{flex:none;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
   .fixchats{display:flex;flex-direction:column;gap:5px;margin:8px 0 2px}
   .fixchat{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0;flex-wrap:wrap}
   .fixdot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -189,270 +240,94 @@
   .fixchat-t{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:60px;flex:1 1 auto}
   .fixchat-d{color:var(--muted);font-size:12px;flex:none;font-weight:600}
   .fixfind{font:inherit;font-size:11.5px;font-weight:600;border:1px solid var(--rule);background:transparent;color:var(--accent);padding:3px 10px;border-radius:7px;cursor:pointer;flex:none;white-space:nowrap}
-  .fixfind:hover{background:rgba(var(--accent-rgb),.10)}
+  .fixfind:hover{background:rgba(var(--accent-rgb),.07)}
   .fixfind.ok{color:#2e7d32;border-color:#2e7d32}
   .fixcmd{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
   .fixcmd-label{color:var(--muted);font-size:12.5px}
-  .fixcmd-code{font-family:ui-monospace,Menlo,monospace;background:rgba(var(--accent-rgb),.12);color:var(--ink);padding:3px 9px;border-radius:7px;font-size:13px;font-weight:600}
+  .fixcmd-code{font-family:ui-monospace,Menlo,monospace;background:rgba(var(--accent-rgb),.09);color:var(--ink);padding:3px 9px;border-radius:7px;font-size:13px;font-weight:600}
   .fixsol{margin-top:12px;display:flex;flex-direction:column;gap:10px}
   .fixstep{display:flex;gap:9px;align-items:flex-start;font-size:12.9px;line-height:1.5}
   .fixnum{flex:none;width:19px;height:19px;border-radius:50%;background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
   .fixstep .fixcmd{margin-top:7px}
   .fixnote{font-size:12px;color:var(--muted);line-height:1.5}
-
-  /* waste */
-  .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:11px;padding:13px 15px;margin:10px 0}
+  .wrow{border:1px solid #ead9c0;background:#fbf6ee;border-radius:12px;padding:14px 16px;margin:10px 0}
   .wrow .wl{font-weight:650;font-size:13.5px}
   .wrow .wm{color:#9a6a1e;font-size:12px;font-weight:600;margin:3px 0 0;font-variant-numeric:tabular-nums}
-  .wrow .wd{color:var(--muted);font-size:12.5px;margin:5px 0 0;line-height:1.5}
-  .wrow .wh{font-size:12.5px;margin:8px 0 0;line-height:1.5}
   .wexp{margin:10px 0 2px}
   .wexp .row{display:grid;grid-template-columns:118px 1fr;gap:12px;font-size:12.5px;line-height:1.55;margin-top:7px;align-items:start}
   .wexp .lab{font-weight:700;color:#9a6a1e;white-space:nowrap}
-  .wexp .val{color:#4a4a44}
+  .wexp .val{color:var(--muted)}
   @media(max-width:640px){.wexp .row{grid-template-columns:1fr;gap:1px}}
+  .wrow .wh{font-size:12.5px;margin:8px 0 0;line-height:1.5}
   .fixbar{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
-  .fixbtn{font:inherit;font-size:12.5px;font-weight:600;border:none;background:var(--accent);color:#fff;padding:7px 14px;border-radius:8px;cursor:pointer}
-  .fixbtn:hover{background:#a2461a}
+  .fixbtn{font:inherit;font-size:12.5px;font-weight:600;border:none;background:var(--accent);color:#fff;padding:8px 15px;border-radius:9px;cursor:pointer}
+  .fixbtn:hover{filter:brightness(1.08)}
   .fixbtn:disabled{opacity:.6;cursor:default}
   .fixstatus{font-size:12.5px}
   .fixstatus.ok{color:#2c7a3f}
   .fixstatus.err{color:#c0392b}
-  .wnote{color:var(--accent);background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.22);border-radius:10px;padding:12px 14px;font-size:13px}
+  .wnote{color:var(--accent);background:rgba(var(--accent-rgb),.04);border:1px solid rgba(var(--accent-rgb),.18);border-radius:12px;padding:12px 14px;font-size:13px}
 
-  /* tracked tools / add a tool */
-  .srow{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--rule);font-size:13px}
+  /* ============ tracked tools ============ */
+  .srow{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--rule);font-size:13px}
   .srow:last-of-type{border-bottom:none}
   .srow .snm{font-weight:600}
   .srow .smeta{color:var(--muted);font-size:12px;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
-  .srow .srm{margin-left:12px;font:inherit;font-size:12px;border:1px solid var(--rule);background:#fff;border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--accent);flex:none}
-  .srow .srm:hover{border-color:#e0b9a0}
-  .addtool{margin-top:14px;border:1px solid var(--rule);border-radius:11px;padding:14px;background:#fafbf9}
+  .srow .srm{margin-left:12px;font:inherit;font-size:12px;border:1px solid var(--rule);background:transparent;border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--accent);flex:none}
+  .srow .srm:hover{border-color:rgba(var(--accent-rgb),.4)}
+  .addtool{margin-top:16px;border:1px solid var(--rule);border-radius:12px;padding:16px;background:var(--bg)}
   .addrow{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center;margin:8px 0}
   .addrow label{font-size:12.5px;color:var(--muted);font-weight:600}
-  .addrow input{font:inherit;font-size:13px;border:1px solid var(--rule);border-radius:8px;padding:7px 10px;width:100%;background:#fff}
+  .addrow input{font:inherit;font-size:13px;border:1px solid var(--rule);border-radius:9px;padding:8px 11px;width:100%;background:var(--panel);color:var(--ink)}
+  .addrow input:focus{outline:none;border-color:rgba(var(--accent-rgb),.5);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.1)}
   .addbar{display:flex;align-items:center;gap:10px;margin-top:10px}
   @media(max-width:640px){.addrow{grid-template-columns:1fr;gap:3px}}
-
-  /* ============================================================
-     REFINED REDESIGN LAYER — soft, elevated, premium (overrides above).
-     Keeps every class/ID; only the look changes.
-     ============================================================ */
-  :root{
-    --bg:#f4f3ee; --ink:#1c1b18; --muted:#8c897e; --rule:#ece9e0; --panel:#ffffff; --accent:#9c2a2c; --accent-rgb:156,42,44;
-    --shadow:0 1px 2px rgba(28,27,24,.04), 0 12px 32px rgba(28,27,24,.07);
-    --shadow-sm:0 1px 2px rgba(28,27,24,.05), 0 4px 14px rgba(28,27,24,.05);
-    --radius:18px;
-  }
-  html{scroll-behavior:smooth; color-scheme:light}
-  /* Opaque themed base behind the gradient. Without this, the `background` shorthand
-     leaves the root color transparent, and on a Mac in Dark appearance the browser's
-     black canvas shows through during momentum-scroll / rubber-band (the "black bar"
-     that popped up at the bottom). overscroll-behavior:none also kills the elastic reveal. */
-  html,body{background-color:var(--bg);
-    background-image:linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.025));
-    background-attachment:fixed; overscroll-behavior:none;
-    color:var(--ink); letter-spacing:-.005em}
-
-  /* sidebar */
-  .sidebar{position:fixed;top:0;left:0;bottom:0;width:230px;padding:20px 14px;z-index:40;overflow-y:auto;
-    background:rgba(255,255,255,.62);backdrop-filter:saturate(150%) blur(16px);-webkit-backdrop-filter:saturate(150%) blur(16px);
-    border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:2px}
-  .sidebar .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15.5px;letter-spacing:-.02em;margin:2px 6px 20px}
-  .sidebar .brand .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);
-    display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 3px 10px rgba(var(--accent-rgb),.32)}
-  .sidebar .nav{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;color:#615e55;
-    font-size:13.5px;font-weight:550;cursor:pointer;text-decoration:none;transition:background .13s,color .13s,transform .13s}
-  .sidebar .nav svg{width:17px;height:17px;flex:none;opacity:.78}
-  .sidebar .nav:hover{background:rgba(var(--accent-rgb),.09);color:var(--ink)}
-  .sidebar .nav:active{transform:scale(.98)}
-  .sidebar .nav.on{background:var(--ink);color:#fff}
-  .sidebar .nav.on svg{opacity:1}
-  .navfoot{margin-top:auto;display:flex;align-items:center;gap:7px;padding:14px 10px 2px;color:var(--muted);font-size:11px;line-height:1.5}
-  .navfoot .pulse{width:7px;height:7px}
-
-  /* main column offset for the sidebar */
-  .wrap{max-width:1120px;margin:0 auto 0 230px;padding:0 36px 90px 32px}
-  @media(max-width:880px){ .sidebar{display:none} .wrap{margin:0 auto;padding:18px 18px 80px} }
-
-  /* sticky frosted header */
-  .top{position:static;align-items:center;margin:0 0 10px;padding:16px 2px 6px;background:transparent;border-bottom:none}
-  h1{font-size:22px;font-weight:700;letter-spacing:-.025em}
-  .sub{font-size:12.5px}
-
-  /* each section becomes an elevated card */
-  .panel{background:var(--panel);border:1px solid var(--rule);border-radius:var(--radius);
-    box-shadow:var(--shadow);padding:20px 22px;margin:18px 0;scroll-margin-top:88px}
-  .panel h2{font-size:15.5px;font-weight:650;letter-spacing:-.01em}
-
-  /* stat cards */
-  .periods{gap:14px;margin:20px 0 6px}
-  .pcard{border:1px solid var(--rule);border-radius:16px;box-shadow:var(--shadow-sm);padding:16px 17px;background:#fff;
-    transition:transform .15s,box-shadow .15s}
-  .pcard:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-  .pcard .v{font-size:24px;font-weight:700;letter-spacing:-.02em}
-  .pcard.accent{background:linear-gradient(180deg,rgba(var(--accent-rgb),0.05),rgba(var(--accent-rgb),0.10));border-color:rgba(var(--accent-rgb),0.22)}
-
-  /* chips, buttons, toggles */
-  .chip{background:#fff;border-color:var(--rule);box-shadow:var(--shadow-sm);border-radius:999px;padding:5px 12px}
-  .btn{border-radius:10px;background:#fff;box-shadow:var(--shadow-sm);font-weight:550;transition:transform .12s,border-color .12s}
-  .btn:hover{transform:translateY(-1px);border-color:var(--rule)}
-  .rangebtns{border-radius:10px;box-shadow:var(--shadow-sm);overflow:hidden}
-  .rangebtns button.on{background:var(--ink);color:#fff}
-  .fixbtn{border-radius:10px;box-shadow:0 4px 14px rgba(185,82,31,.25)}
-  .lstat{border-radius:14px;box-shadow:var(--shadow-sm)}
-  .lstat.fire{background:linear-gradient(180deg,rgba(var(--accent-rgb),0.06),rgba(var(--accent-rgb),0.10))}
-
-  /* flatten cards-inside-cards so it doesn't look heavy */
-  .arun,.wrow,.sug,.promptguide,.revealbox,.addtool{box-shadow:none}
-
-  /* prettier scrollbars */
-  ::-webkit-scrollbar{width:11px;height:11px}
-  ::-webkit-scrollbar-thumb{background:#dedbd0;border-radius:8px;border:3px solid transparent;background-clip:content-box}
-  ::-webkit-scrollbar-thumb:hover{background:#cbc7ba;background-clip:content-box}
-
-  /* theme switcher control (in sidebar) */
-  .themeswitch{display:flex;gap:4px;margin:10px 6px 2px;background:rgba(0,0,0,.045);border-radius:11px;padding:3px}
-  .themeswitch button{flex:1;font:inherit;font-size:11.5px;font-weight:600;border:none;background:transparent;color:var(--muted);padding:6px 4px;border-radius:8px;cursor:pointer;transition:.12s}
-  .themeswitch button.on{background:#fff;color:var(--ink);box-shadow:var(--shadow-sm)}
-  .accentpick{margin:9px 6px 2px}
-  .accentpick .aplabel{display:block;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-  .accentpick .arow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-  .accentpick .asw,.accentpick .psw{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
-  .accentpick .asw.on,.accentpick .psw.on{box-shadow:0 0 0 2px var(--panel),0 0 0 3.5px var(--ink)}
-  .accentpick input[type=color]{width:20px;height:20px;padding:0;border:1px solid rgba(0,0,0,.18);border-radius:50%;background:none;cursor:pointer}
-
-  /* ===================== DARK THEME ===================== */
-  html[data-theme="dark"]{
-    color-scheme:dark;
-    --bg:#131311; --ink:#edece9; --muted:#9b988e; --rule:#2c2a26; --panel:#1c1b18; --accent:#e0696b;
-    --shadow:0 1px 2px rgba(0,0,0,.5), 0 14px 34px rgba(0,0,0,.5);
-    --shadow-sm:0 1px 2px rgba(0,0,0,.45), 0 5px 16px rgba(0,0,0,.4);
-  }
-  html[data-theme="dark"] body{background:transparent}
-  html[data-theme="dark"] .sidebar{background:rgba(17,16,13,.7);border-right-color:var(--rule)}
-  html[data-theme="dark"] .sidebar .nav{color:#b8b4a9}
-  html[data-theme="dark"] .sidebar .nav:hover{background:rgba(224,105,107,.13);color:#fff}
-  html[data-theme="dark"] .sidebar .nav.on{background:#2f2d28;color:#fff}
-  html[data-theme="dark"] .top{background:transparent;border-bottom:none}
-  html[data-theme="dark"] .pcard,html[data-theme="dark"] .lstat{background:var(--panel)}
-  html[data-theme="dark"] .pcard.accent{background:linear-gradient(180deg,#2a1517,#231619);border-color:#4a2729}
-  html[data-theme="dark"] .chip,html[data-theme="dark"] .btn,html[data-theme="dark"] .rangebtns button,html[data-theme="dark"] .help{background:#232220;color:var(--ink)}
-  html[data-theme="dark"] .rangebtns button.on{background:var(--accent);color:#0b1f14}
-  html[data-theme="dark"] .lstat.fire{background:linear-gradient(180deg,#2a1b12,#23160f)}
-  html[data-theme="dark"] .burnchip{background:#2a1b12;border-color:#5a3a22;color:#f0a878}
-  html[data-theme="dark"] .addtool,html[data-theme="dark"] .revealbox,html[data-theme="dark"] .promptguide{background:#1a1916;border-color:var(--rule)}
-  html[data-theme="dark"] .addrow input{background:#121210;color:var(--ink);border-color:var(--rule)}
-  html[data-theme="dark"] .sug,html[data-theme="dark"] .leftoverbar{background:#241719;border-color:#4a2729}
-  html[data-theme="dark"] .wrow{background:#241d12;border-color:#4a3a1e}
-  html[data-theme="dark"] .wrow .wm{color:#d8a55a}
-  html[data-theme="dark"] .wnote{background:#241719;border-color:#4a2729;color:#e6c8ca}
-  html[data-theme="dark"] .warnbar{background:#2a2113;border-color:#4a3a1e;color:#e6b585}
-  html[data-theme="dark"] .themeswitch{background:rgba(255,255,255,.06)}
-  html[data-theme="dark"] .themeswitch button.on{background:#2f2d28;color:#fff}
-
-  /* ===================== SOFT (neumorphic) THEME ===================== */
-  html[data-theme="soft"]{
-    --bg:#e9ebf0; --ink:#41454d; --muted:#888d9b; --rule:#e9ebf0; --panel:#e9ebf0; --accent:#5a73d6;
-    --shadow:7px 7px 16px #c6c9d3, -7px -7px 16px #fdffff;
-    --shadow-sm:4px 4px 10px #cdd0da, -4px -4px 10px #fdffff;
-    --radius:20px;
-  }
-  html[data-theme="soft"] body{background:transparent}
-  html[data-theme="soft"] .sidebar{background:#e9ebf0;border-right:none}
-  html[data-theme="soft"] .sidebar .nav{color:#5d6371}
-  html[data-theme="soft"] .sidebar .nav:hover{background:transparent;color:#41454d;box-shadow:var(--shadow-sm)}
-  html[data-theme="soft"] .sidebar .nav.on{background:#e9ebf0;color:var(--accent);box-shadow:inset 3px 3px 7px #c6c9d3, inset -3px -3px 7px #fdffff}
-  html[data-theme="soft"] .top{background:transparent;border-bottom:none}
-  html[data-theme="soft"] .panel{background:#e9ebf0;border:none;box-shadow:var(--shadow)}
-  html[data-theme="soft"] .pcard,html[data-theme="soft"] .pcard.accent,html[data-theme="soft"] .chip,html[data-theme="soft"] .btn,html[data-theme="soft"] .rangebtns,html[data-theme="soft"] .lstat,html[data-theme="soft"] .lstat.fire,html[data-theme="soft"] .help{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm)}
-  html[data-theme="soft"] .rangebtns button{background:transparent}
-  html[data-theme="soft"] .rangebtns button.on{background:#e9ebf0;color:var(--accent);box-shadow:inset 3px 3px 6px #c6c9d3,inset -3px -3px 6px #fdffff}
-  html[data-theme="soft"] .arun,html[data-theme="soft"] .wrow,html[data-theme="soft"] .sug,html[data-theme="soft"] .revealbox,html[data-theme="soft"] .promptguide,html[data-theme="soft"] .addtool,html[data-theme="soft"] .leftoverbar,html[data-theme="soft"] .warnbar,html[data-theme="soft"] .wnote{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm)}
-  html[data-theme="soft"] .addrow input{background:#e9ebf0;border:none;box-shadow:inset 3px 3px 7px #c6c9d3,inset -3px -3px 7px #fdffff}
-  html[data-theme="soft"] .burnchip{background:#e9ebf0;border:none;box-shadow:var(--shadow-sm);color:var(--accent)}
-  html[data-theme="soft"] .themeswitch{background:#e9ebf0;box-shadow:inset 3px 3px 7px #c6c9d3,inset -3px -3px 7px #fdffff}
-  html[data-theme="soft"] .themeswitch button.on{background:#e9ebf0;color:var(--accent);box-shadow:3px 3px 7px #c6c9d3,-3px -3px 7px #fdffff}
-
-  /* empty-state banner + add-your-own-AI affordance */
-  .emptybanner{display:flex;align-items:center;gap:15px;background:linear-gradient(180deg,rgba(var(--accent-rgb),.06),rgba(var(--accent-rgb),.02));border:1px solid rgba(var(--accent-rgb),.22);border-radius:14px;padding:15px 17px;margin:0 0 8px}
-  .emptybanner.hidden{display:none}
-  .emptybanner .eb-ic{width:40px;height:40px;flex:none;border-radius:11px;background:rgba(var(--accent-rgb),.12);color:var(--accent);display:flex;align-items:center;justify-content:center}
-  .emptybanner .eb-tx{flex:1;min-width:0}
-  .emptybanner .eb-h{font-weight:700;font-size:15px;margin-bottom:2px}
-  .emptybanner .eb-p{color:var(--muted);font-size:13.5px;line-height:1.5}
-  .emptybanner .eb-btn{flex:none;border:none;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:650;font-size:13.5px;padding:10px 15px;cursor:pointer;white-space:nowrap}
-  .emptybanner .eb-btn:hover{filter:brightness(1.07)}
-  .addtoollink{display:inline-flex;align-items:center;gap:6px;margin:-2px 0 4px;border:none;background:transparent;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:4px 2px}
+  .addtoollink{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0;border:none;background:transparent;color:var(--accent);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 0}
   .addtoollink:hover{text-decoration:underline}
 
-  /* update-available banner (accent-tinted, same shape as .emptybanner) */
-  .updatebanner{margin:0 0 16px}
-  .updatebanner .eb-p code{display:inline-block;margin-top:4px;background:rgba(var(--accent-rgb),.10);border:1px solid rgba(var(--accent-rgb),.22);border-radius:6px;padding:3px 8px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all}
-  .updatebanner .addtoollink{margin-left:2px}
-  @media (max-width:640px){ .updatebanner{flex-wrap:wrap} .updatebanner .addtoollink{width:100%;justify-content:center} }
-  @media (max-width:640px){ .emptybanner{flex-direction:column;align-items:flex-start} .emptybanner .eb-btn{width:100%} }
-
-  /* full-screen "update available" popup — a bigger, harder-to-miss version of .updatebanner.
-     Shown once per page session on load (if outdated), and again after a manual Rescan finds
-     a new version. Purely in-memory: no localStorage/sessionStorage involved. */
-  .um-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:22px}
+  /* ============ banners / modals ============ */
+  .emptybanner{display:flex;align-items:center;gap:15px;background:rgba(var(--accent-rgb),.04);border:1px solid rgba(var(--accent-rgb),.2);border-radius:14px;padding:15px 17px;margin:18px 0 0}
+  .emptybanner.hidden{display:none}
+  .emptybanner .eb-ic{width:38px;height:38px;flex:none;border-radius:10px;background:rgba(var(--accent-rgb),.09);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .emptybanner .eb-tx{flex:1;min-width:0}
+  .emptybanner .eb-h{font-weight:650;font-size:14.5px;margin-bottom:2px}
+  .emptybanner .eb-p{color:var(--muted);font-size:13px;line-height:1.5}
+  .emptybanner .eb-btn{flex:none;border:none;border-radius:9px;background:var(--accent);color:#fff;font:inherit;font-weight:600;font-size:13px;padding:9px 15px;cursor:pointer;white-space:nowrap}
+  .emptybanner .eb-btn:hover{filter:brightness(1.08)}
+  @media(max-width:640px){.emptybanner{flex-direction:column;align-items:flex-start}.emptybanner .eb-btn{width:100%}}
+  .updatebanner{margin:18px 0 0}
+  .updatebanner .eb-p code{display:inline-block;margin-top:4px;background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.2);border-radius:6px;padding:3px 8px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all}
+  .updatebanner .addtoollink{margin:0 0 0 2px}
+  @media(max-width:640px){.updatebanner{flex-wrap:wrap}.updatebanner .addtoollink{width:100%;justify-content:center}}
+  .um-overlay{position:fixed;inset:0;background:rgba(26,26,23,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:22px;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
   .um-overlay.hidden{display:none}
-  .um-card{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:20px;box-shadow:0 30px 90px rgba(0,0,0,.4);width:min(520px,94vw);max-height:88vh;overflow:auto;padding:30px 30px 26px}
+  .um-card{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:18px;box-shadow:0 18px 50px rgba(26,26,23,.18);width:min(520px,94vw);max-height:88vh;overflow:auto;padding:28px 28px 24px}
   .um-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
-  .um-icon{flex:none;width:44px;height:44px;border-radius:13px;background:rgba(var(--accent-rgb),.14);color:var(--accent);display:flex;align-items:center;justify-content:center}
-  .um-head h2{margin:0;font-size:23px;font-weight:750;letter-spacing:-.02em;color:var(--accent)}
-  .um-vers{font-size:14.5px;color:var(--ink);margin:14px 0 2px;line-height:1.5}
+  .um-icon{flex:none;width:42px;height:42px;border-radius:12px;background:rgba(var(--accent-rgb),.1);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .um-head h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.02em;color:var(--accent)}
+  .um-vers{font-size:14px;color:var(--ink);margin:14px 0 2px;line-height:1.5}
   .um-vers b{font-variant-numeric:tabular-nums}
   .um-sub{color:var(--muted);font-size:13px;margin:0 0 18px;line-height:1.5}
-  .um-cmdbox{background:rgba(var(--accent-rgb),.08);border:1px solid rgba(var(--accent-rgb),.22);border-radius:12px;padding:14px 16px;margin:0 0 18px}
-  .um-cmdbox code{display:block;font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all;white-space:pre-wrap}
-  .um-copybtn{width:100%;border:none;border-radius:12px;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:15px;padding:14px 18px;cursor:pointer;box-shadow:0 10px 26px rgba(var(--accent-rgb),.32);transition:transform .12s,filter .12s}
-  .um-copybtn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-  .um-copybtn.copied{background:#2c7a3f;box-shadow:0 10px 26px rgba(44,122,63,.28)}
+  .um-cmdbox{background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.2);border-radius:12px;padding:14px 16px;margin:0 0 14px}
+  .um-cmdbox code{display:block;font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all;white-space:pre-wrap}
+  .um-copybtn{width:100%;border:none;border-radius:11px;background:var(--accent);color:#fff;font:inherit;font-weight:650;font-size:14.5px;padding:13px 18px;cursor:pointer}
+  .um-copybtn:hover{filter:brightness(1.08)}
+  .um-copybtn.copied{background:#2c7a3f}
   .um-copysub{text-align:center;font-size:12px;color:var(--muted);margin:8px 0 0;min-height:15px}
-  .um-steps{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 4px;font-size:12px;color:var(--muted)}
+  .um-steps{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px;font-size:12px;color:var(--muted)}
   .um-steps span{background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:5px 9px}
-  .um-foot{display:flex;justify-content:center;margin-top:16px}
+  .um-foot{display:flex;justify-content:center;margin-top:14px}
   .um-later{border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:6px 10px}
+  .um-later:hover{color:var(--ink);text-decoration:underline}
   .um-manual{margin:2px 0}
   .um-manual>summary{cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600;list-style:none;padding:8px 0;text-align:center}
   .um-manual>summary::-webkit-details-marker{display:none}
   .um-manual[open]>summary{margin-bottom:12px}
-  .um-copybtn-alt{background:transparent;color:var(--accent);border:1px solid var(--rule);box-shadow:none;font-size:13.5px;padding:11px 14px}
-  #um-now{background:var(--accent);color:#fff;box-shadow:0 8px 24px rgba(var(--accent-rgb),.36),0 0 0 3px rgba(var(--accent-rgb),.20)}
-  #um-now:hover{background:var(--accent);filter:brightness(1.08);transform:translateY(-1px)}
-  #um-now:disabled{background:var(--accent);opacity:.82}
-  .um-later:hover{color:var(--ink);text-decoration:underline}
-  html[data-theme="soft"] .um-card{box-shadow:var(--shadow)}
-  html[data-theme="soft"] .um-cmdbox{box-shadow:var(--shadow-sm)}
-  @media(max-width:520px){ .um-card{padding:22px 18px 20px} .um-head h2{font-size:20px} }
-
-  /* calendar heat follows the chosen accent */
-  .cell.heat0,.sw.heat0{background:rgba(var(--accent-rgb),.06)}
-  .cell.heat1,.sw.heat1{background:rgba(var(--accent-rgb),.20)}
-  .cell.heat2,.sw.heat2{background:rgba(var(--accent-rgb),.45)}
-  .cell.heat3,.sw.heat3{background:rgba(var(--accent-rgb),.72)}
-  .cell.heat4,.sw.heat4{background:rgba(var(--accent-rgb),1)}
-  /* over-time chart hover (stock-style) */
-  #ts-svg{cursor:crosshair}
-  #ts-hover{pointer-events:none}
-  .ts-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.55}
-  .charttip{position:absolute;pointer-events:none;z-index:40;background:var(--panel);border:1px solid var(--rule);border-radius:9px;box-shadow:0 6px 22px rgba(0,0,0,.14);padding:8px 10px;font-size:12px;min-width:132px}
-  .charttip .cthd{font-weight:700;margin-bottom:5px;font-size:11.5px}
-  .charttip .ctrow{display:flex;align-items:center;gap:6px;margin:3px 0;white-space:nowrap}
-  .charttip .ctrow b{margin-left:auto;font-variant-numeric:tabular-nums}
-  .charttip .cdot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
-
-  /* customize-layout control + modal */
-  .customizebtn{display:flex;align-items:center;gap:11px;width:calc(100% - 0px);margin:6px 0 0;padding:9px 11px;border-radius:11px;border:none;background:transparent;color:#615e55;font:inherit;font-size:13.5px;font-weight:550;cursor:pointer;text-align:left}
-  .customizebtn svg{width:17px;height:17px;opacity:.78;flex:none}
-  .customizebtn:hover{background:rgba(var(--accent-rgb),.09);color:var(--ink)}
-  html[data-theme="dark"] .customizebtn{color:#b8b4a9}
-  html[data-theme="dark"] .customizebtn:hover{color:#fff;background:rgba(224,105,107,.13)}
-  html[data-theme="soft"] .customizebtn:hover{background:transparent;box-shadow:var(--shadow-sm);color:#41454d}
-  .modal-overlay{position:fixed;inset:0;background:rgba(20,19,16,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
-  .modal{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.32);width:min(450px,94vw);max-height:84vh;overflow:auto;padding:20px 22px}
+  .um-copybtn-alt{background:transparent;color:var(--accent);border:1px solid var(--rule);font-size:13.5px;padding:11px 14px}
+  #um-now:disabled{opacity:.82}
+  @media(max-width:520px){.um-card{padding:22px 18px 20px}.um-head h2{font-size:19px}}
+  .modal-overlay{position:fixed;inset:0;background:rgba(26,26,23,.4);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:16px;box-shadow:0 18px 50px rgba(26,26,23,.18);width:min(450px,94vw);max-height:84vh;overflow:auto;padding:20px 22px}
   .modal-head{display:flex;align-items:center;gap:12px}
   .modal-head h3{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em}
   .modal-x{margin-left:auto;border:none;background:transparent;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;padding:0 4px}
@@ -462,17 +337,68 @@
   .lrow .grip{cursor:grab;color:var(--muted);font-size:15px;line-height:1;flex:none;user-select:none}
   .lrow:active .grip{cursor:grabbing}
   .lrow.dragging{opacity:.4}
-  .lrow.dragover{border-color:var(--accent);box-shadow:inset 0 0 0 2px rgba(var(--accent-rgb),.18)}
+  .lrow.dragover{border-color:var(--accent);box-shadow:inset 0 0 0 2px rgba(var(--accent-rgb),.16)}
   .lrow .lname{flex:1;font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .liconbtn{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:8px;padding:4px 9px;cursor:pointer;flex:none}
-  .liconbtn:hover{border-color:var(--accent)}
+  .liconbtn:hover{border-color:rgba(var(--accent-rgb),.5)}
   .liconbtn:disabled{opacity:.32;cursor:default}
   .liconbtn.lvis.off{color:var(--muted)}
   .modal-foot{margin-top:15px;display:flex;justify-content:flex-end}
 
-  /* tooltip behaviour: don't flash while scrolling; require a brief hover-rest */
-  .help:hover::after,.help:hover::before{transition-delay:.32s}
-  body.is-scrolling .help::after,body.is-scrolling .help::before{opacity:0!important;visibility:hidden!important;transition:none!important}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#dedbd0;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#cbc7ba;background-clip:content-box}
+
+  @media(max-width:940px){
+    .sidebar{display:none}
+    .wrap{margin:0 auto;padding:20px 18px 80px}
+    h1{display:block}
+  }
+
+  /* ===================== DARK ===================== */
+  html[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#161511; --ink:#ecebe6; --muted:#9c9a90; --rule:#2c2a24; --panel:#1d1c17;
+    --accent:#e0696b; --accent-rgb:224,105,107; --hover:#26251f;
+  }
+  html[data-theme="dark"] .splitbar,html[data-theme="dark"] .bar,html[data-theme="dark"] .tbtrack{background:#2a2822}
+  html[data-theme="dark"] .themeswitch{background:rgba(255,255,255,.06)}
+  html[data-theme="dark"] .themeswitch button.on{background:#2f2d27;color:#fff;box-shadow:0 0 0 1px var(--rule)}
+  html[data-theme="dark"] .accentpick .asw,html[data-theme="dark"] .accentpick .psw,html[data-theme="dark"] .accentpick input[type=color]{border-color:rgba(255,255,255,.22)}
+  html[data-theme="dark"] .warnbar,html[data-theme="dark"] .wrow{background:#28210f;border-color:#4a3a1e}
+  html[data-theme="dark"] .warnbar{color:#e6b585}
+  html[data-theme="dark"] .wrow .wm,html[data-theme="dark"] .wexp .lab{color:#d8a55a}
+  html[data-theme="dark"] .astatus.idle{color:#d8a55a;background:#28210f;border-color:#4a3a1e}
+  html[data-theme="dark"] .demopill{color:#d8a55a;background:#28210f;border-color:#4a3a1e}
+  html[data-theme="dark"] .addtool{background:#1a1914}
+  html[data-theme="dark"] .addrow input{background:#141310}
+  html[data-theme="dark"] .help::after{background:#f0efe9;color:#1a1a17}
+  html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#3a3830;background-clip:content-box}
+  html[data-theme="dark"] .charttip{box-shadow:0 6px 20px rgba(0,0,0,.45)}
+  html[data-theme="dark"] .um-card,html[data-theme="dark"] .modal{box-shadow:0 18px 50px rgba(0,0,0,.5)}
+  html[data-theme="dark"] .fixstatus.ok{color:#7cc98f}
+  html[data-theme="dark"] .fixstatus.err{color:#e08a80}
+
+  /* ===================== SOFT ===================== */
+  html[data-theme="soft"]{
+    --bg:#e9ebf0; --ink:#41454d; --muted:#888d9b; --rule:#dde0e7; --panel:#e9ebf0;
+    --accent:#5a73d6; --accent-rgb:90,115,214; --hover:#e2e5ec;
+    --soft-d:#c9ccd6; --soft-l:#fdffff;
+  }
+  html[data-theme="soft"] .sidebar{border-right:none}
+  html[data-theme="soft"] .panel,html[data-theme="soft"] .emptybanner{border:none;box-shadow:6px 6px 14px var(--soft-d),-6px -6px 14px var(--soft-l)}
+  html[data-theme="soft"] .btn,html[data-theme="soft"] .rangebtns,html[data-theme="soft"] .arun,html[data-theme="soft"] .wrow,html[data-theme="soft"] .sug,html[data-theme="soft"] .revealbox,html[data-theme="soft"] .promptguide,html[data-theme="soft"] .addtool,html[data-theme="soft"] .leftoverbar,html[data-theme="soft"] .warnbar,html[data-theme="soft"] .wnote,html[data-theme="soft"] .tbtip,html[data-theme="soft"] .demopill{border:none;box-shadow:4px 4px 10px var(--soft-d),-4px -4px 10px var(--soft-l);background:var(--panel)}
+  html[data-theme="soft"] .rangebtns button{border-left:none}
+  html[data-theme="soft"] .rangebtns button.on{background:var(--panel);color:var(--accent);box-shadow:inset 3px 3px 6px var(--soft-d),inset -3px -3px 6px var(--soft-l)}
+  html[data-theme="soft"] .sidebar .nav.on{background:var(--panel);color:var(--accent);box-shadow:inset 3px 3px 7px var(--soft-d),inset -3px -3px 7px var(--soft-l)}
+  html[data-theme="soft"] .sidebar .nav:hover{background:transparent;box-shadow:4px 4px 10px var(--soft-d),-4px -4px 10px var(--soft-l)}
+  html[data-theme="soft"] .themeswitch{background:var(--panel);box-shadow:inset 3px 3px 7px var(--soft-d),inset -3px -3px 7px var(--soft-l)}
+  html[data-theme="soft"] .themeswitch button.on{background:var(--panel);color:var(--accent);box-shadow:3px 3px 7px var(--soft-d),-3px -3px 7px var(--soft-l)}
+  html[data-theme="soft"] .addrow input{background:var(--panel);border:none;box-shadow:inset 3px 3px 7px var(--soft-d),inset -3px -3px 7px var(--soft-l)}
+  html[data-theme="soft"] .splitbar,html[data-theme="soft"] .bar,html[data-theme="soft"] .tbtrack{background:#dde0e7}
+  html[data-theme="soft"] .cell{border:none;background:#eef0f4;box-shadow:inset 2px 2px 5px var(--soft-d),inset -2px -2px 5px var(--soft-l)}
+  html[data-theme="soft"] .cell.empty{background:transparent;box-shadow:none}
+  html[data-theme="soft"] .um-card,html[data-theme="soft"] .modal{border:none;box-shadow:12px 12px 28px var(--soft-d),-12px -12px 28px var(--soft-l)}
 </style>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('tbTheme')||'light';}catch(e){}
 (function(){
@@ -485,7 +411,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
 </head>
 <body>
 <nav class="sidebar">
-  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="1.7" fill="none" stroke="#e7d5a1" stroke-width="2.2"/><path d="M9 3.6V20.4M15.4 3.6V13M9 13H20.4M15.4 8.2H20.4" stroke="#e7d5a1" stroke-width="2.2" fill="none"/></svg></span> Token Burn</div>
+  <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="15" height="15"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="1.7" fill="none" stroke="#f3e0c8" stroke-width="2.2"/><path d="M9 3.6V20.4M15.4 3.6V13M9 13H20.4M15.4 8.2H20.4" stroke="#f3e0c8" stroke-width="2.2" fill="none"/></svg></span> Token Burn</div>
   <a class="nav on" data-go="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Overview</a>
   <a class="nav" data-go="Running now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg>Running now</a>
   <a class="nav" data-go="Sub-agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Agents</a>
@@ -501,17 +427,17 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
   <div class="accentpick" id="primary-pick">
     <span class="aplabel">Primary · background</span>
     <span class="arow">
-      <button class="psw" data-c="#f4f3ee" style="background:#f4f3ee" title="Skin"></button>
+      <button class="psw" data-c="#fdfcf8" style="background:#fdfcf8" title="Warm white"></button>
       <button class="psw" data-c="#ffffff" style="background:#ffffff" title="White"></button>
       <button class="psw" data-c="#eef1f4" style="background:#eef1f4" title="Cool gray"></button>
       <button class="psw" data-c="#f3ece1" style="background:#f3ece1" title="Warm"></button>
       <button class="psw" data-c="#1b1a18" style="background:#1b1a18" title="Charcoal"></button>
       <button class="psw" data-c="#11151f" style="background:#11151f" title="Midnight"></button>
-      <input type="color" id="primary-custom" value="#f4f3ee" title="Custom background color">
+      <input type="color" id="primary-custom" value="#fdfcf8" title="Custom background color">
     </span>
   </div>
   <div class="accentpick" id="accent-pick">
-    <span class="aplabel">Secondary · highlight (logo, accents)</span>
+    <span class="aplabel">Secondary · highlight</span>
     <span class="arow">
       <button class="asw" data-c="#9c2a2c" style="background:#9c2a2c" title="Maroon"></button>
       <button class="asw" data-c="#b8442e" style="background:#b8442e" title="Rust"></button>
@@ -536,7 +462,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
 <div class="um-overlay hidden" id="update-modal">
   <div class="um-card">
     <div class="um-head">
-      <span class="um-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>
+      <span class="um-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>
       <h2>Update available</h2>
     </div>
     <p class="um-vers" id="um-versline">You're on v<b id="um-current">—</b> — v<b id="um-latest">—</b> is now available.</p>
@@ -555,16 +481,16 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
 </div>
 <div class="wrap">
   <div class="top">
-    <div><h1>Token Burn</h1><p class="sub">Live from your machine — Claude Code, Cowork, and Codex. <span id="genat"></span></p></div>
-    <button class="btn" id="refresh" style="margin-left:auto">↻ Rescan</button>
-    <span class="help r" data-tip="Re-reads all your logs right now to refresh every number on this page. It normally updates on its own, so you rarely need this.">?</span>
+    <div><h1>Token Burn</h1><p class="sub">Live from this Mac — Claude Code, Cowork, and Codex. <span id="genat"></span></p></div>
+    <span class="demopill hidden" id="demo-pill">Sample data — tracker not connected</span>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:8px;flex:none"><button class="btn" id="refresh">↻ Rescan</button><span class="help r" data-tip="Re-reads all your logs right now to refresh every number on this page. It normally updates on its own, so you rarely need this.">?</span></span>
   </div>
 
   <div id="loading" class="loading"><span class="spin"></span><span id="lmsg">Scanning your logs…</span></div>
 
   <div id="dash" class="hidden">
     <div id="update-banner" class="emptybanner updatebanner hidden">
-      <span class="eb-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>
+      <span class="eb-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v10M12 15l-4-4M12 15l4-4"/><path d="M4 19h16"/></svg></span>
       <div class="eb-tx">
         <div class="eb-h" id="update-headline">Update available</div>
         <div class="eb-p"><code id="update-cmd"></code></div>
@@ -572,17 +498,26 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
       <button class="eb-btn" id="update-copy">Copy</button>
       <button class="addtoollink" id="update-dismiss">Dismiss</button>
     </div>
-    <div class="periods">
-      <div class="pcard accent"><div class="k">Today</div><div class="v" id="p-day">—</div></div>
-      <div class="pcard"><div class="k">This week</div><div class="v" id="p-week">—</div></div>
-      <div class="pcard"><div class="k">This month</div><div class="v" id="p-month">—</div></div>
-      <div class="pcard"><div class="k">This year</div><div class="v" id="p-year">—</div></div>
-      <div class="pcard"><div class="k">All-time</div><div class="v" id="p-all">—</div></div>
+
+    <div class="hero">
+      <div class="hero-main">
+        <div class="eyebrow">Today · <span id="hero-date">—</span></div>
+        <div class="hero-num"><span class="v" id="p-day">—</span><span class="unit">tokens</span></div>
+        <div class="hero-live hidden" id="hero-live"><span class="pulse"></span><span id="hero-burn">—</span></div>
+        <div class="spark"><svg id="spark-svg" viewBox="0 0 340 60"></svg><div class="sparklbl">last 24 hours</div></div>
+      </div>
+      <div class="hero-side">
+        <div class="prow"><span>This week</span><b id="p-week">—</b></div>
+        <div class="prow"><span>This month</span><b id="p-month">—</b></div>
+        <div class="prow"><span>This year</span><b id="p-year">—</b></div>
+        <div class="prow last"><span>All-time</span><b id="p-all">—</b></div>
+        <div id="tools"></div>
+        <button class="addtoollink" id="add-tool-top">+ Add another AI tool to track</button>
+      </div>
     </div>
-    <div class="chips" id="tools"></div>
-    <button class="addtoollink" id="add-tool-top">+ Add another AI tool to track</button>
+
     <div id="empty-banner" class="emptybanner hidden">
-      <span class="eb-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg></span>
+      <span class="eb-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg></span>
       <div class="eb-tx">
         <div class="eb-h">No token usage found yet</div>
         <div class="eb-p">As you use <b>Claude Code</b>, <b>Cowork</b>, or <b>Codex</b> on this Mac, your activity appears here automatically — nothing to set up. Using a different AI tool? Add it to count its tokens too.</div>
@@ -592,24 +527,23 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     <div id="warnings"></div>
 
     <div class="panel">
-      <div class="panelhead"><h2>Running now <span class="help" data-tip="A live view of which AI sessions (chats) and processes are active right now. The four cards show how fast you're spending tokens, plus CPU and memory use. Refreshes every few seconds.">?</span></h2><span class="pulse"></span>
-        <span id="live-at" style="margin-left:auto;color:var(--muted);font-size:12px"></span></div>
-      <p class="cap">What's active right now — each chat/session by its title, plus live CPU, memory and token burn. Refreshes on its own every few seconds.</p>
-      <div class="livestrip" id="live-strip"></div>
+      <div class="panelhead"><h2>Running now <span class="help" data-tip="A live view of which AI sessions and processes are active right now, plus how fast you're spending tokens. Refreshes every few seconds.">?</span></h2><span class="pulse"></span>
+        <span class="livemeta" id="live-meta"></span><span class="liveat" id="live-at"></span></div>
+      <p class="cap">What's active right now — each chat or session by its title, with its live token burn. Refreshes on its own.</p>
       <div id="running"><div class="livenote">Checking…</div></div>
       <div id="idle-note"></div>
     </div>
 
     <div class="panel">
-      <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running, this shows what it's actually doing inside: which tools it's using and how often, code changes it made, and any helper 'sub-agents' it started. Hover a count for what it means; click a row to see the full detail.">?</span></h2>
-        <span id="agents-at" style="margin-left:auto;color:var(--muted);font-size:12px"></span></div>
-      <p class="cap">Each row is one agent <b>run</b>. Hover a count to see what it means; click a row to expand tools touched, code patches, and any sub-agents it spawned. Live. <i>MCP = external tools (browser, shell, files…); Task = the agent's to-do list.</i></p>
+      <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running: which tools it used, code changes it made, and any helper sub-agents it started. Click a row for full detail.">?</span></h2>
+        <span class="livemeta" id="agents-at"></span></div>
+      <p class="cap">Each row is one agent run — click it to expand the full detail. Badges count what it did: ⚙ tool calls · ✎ code edits · ▸ sub-agents it started · ⇄ MCP calls <i>(MCP = external tools like the browser, shell, or files; Task = the agent's to-do list)</i>.</p>
       <div id="agents"><div class="livenote">Checking…</div></div>
     </div>
 
     <div class="panel">
       <div class="panelhead">
-        <h2>Calendar <span class="help" data-tip="Tokens used each day this month. Darker green = more tokens that day. Today has an orange outline. Use the arrows to change month.">?</span></h2>
+        <h2>Calendar <span class="help" data-tip="Tokens used each day. A deeper tint = more tokens. Today is outlined.">?</span></h2>
         <div class="calnav">
           <button class="btn icon" id="cal-prev">‹</button>
           <span id="cal-title"></span>
@@ -617,10 +551,10 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
           <button class="btn" id="cal-today">Today</button>
         </div>
       </div>
-      <p class="cap">Tokens burned each day. Darker = more; today is outlined.</p>
+      <p class="cap">Tokens burned each day. Deeper tint = more; today is outlined.</p>
       <div class="cal" id="cal"></div>
       <div class="callegend">Less
-        <span class="sw heat0"></span>
+        <span class="sw"></span>
         <span class="sw heat1"></span>
         <span class="sw heat2"></span>
         <span class="sw heat3"></span>
@@ -629,39 +563,38 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel">
-      <div class="panelhead"><h2>Over time <span class="help" data-tip="Your token use plotted over time, one colored line per tool. Use the buttons on the right to zoom the time window. Lines break where there was no activity. Updates live.">?</span></h2>
+      <div class="panelhead"><h2>Over time <span class="help" data-tip="Token use over time, one line per tool. Zoom with the range buttons; hover for exact values.">?</span></h2>
         <div class="rangebtns" id="ts-range">
           <button data-r="1d">1D</button><button data-r="5d">5D</button><button data-r="1m" class="on">1M</button><button data-r="all">All</button>
-        </div>
-        <span class="help r" data-tip="Zoom the chart: 1D = last 24 hours (by hour), 5D = last 5 days, 1M = last 30 days (by day), All = your whole history.">?</span></div>
+        </div></div>
       <p class="cap" id="ts-cap">Tokens over time, one line per tool. Updates live.</p>
       <svg id="ts-svg"></svg>
       <div class="legend" id="ts-legend"></div>
     </div>
 
     <div class="panel">
-      <h2>Where your tokens go — top projects <span class="help" data-tip="Which folders/projects on your Mac your tokens went to. A longer bar = more tokens spent working in that folder. Colors show which tool.">?</span></h2>
+      <h2>Where your tokens go — top projects <span class="help" data-tip="Which folders and projects your tokens went to. Longer bar = more tokens; colors show which tool.">?</span></h2>
       <p class="cap">Which working directories / sessions burned the most, by tool.</p>
       <div id="projects"></div>
     </div>
 
     <div class="panel">
-      <h2>Why — what you worked on (top sessions) <span class="help" data-tip="The individual chats/tasks that used the most tokens, each labeled by your opening request. This answers 'what was I actually doing that cost the most?'">?</span></h2>
-      <p class="cap">The tasks/threads that burned the most, titled by your opening request or the session name.</p>
+      <h2>Why — what you worked on (top sessions) <span class="help" data-tip="The individual chats and tasks that used the most tokens, labeled by your opening request.">?</span></h2>
+      <p class="cap">The tasks and threads that burned the most, titled by your opening request or the session name.</p>
       <div id="why"></div>
     </div>
 
     <div class="panel">
-      <h2>Top 10 days <span class="help" data-tip="Your 10 heaviest days by token use, with the date, the tools involved (colored dots), and the top projects that day.">?</span></h2>
+      <h2>Top 10 days <span class="help" data-tip="Your heaviest days by token use, with the tools involved and the top projects that day.">?</span></h2>
       <p class="cap">Your heaviest days and what they went to.</p>
       <table><thead><tr><th></th><th>Date</th><th>Tokens</th><th>Tools</th><th>Top projects</th></tr></thead><tbody id="top10"></tbody></table>
     </div>
 
     <div class="panel">
-      <h2>Where you can become more efficient <span class="help" data-tip="Habits you can change to use fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. These are things to do differently, not things to delete.">?</span></h2>
-      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders — plus where your tokens actually go. <i>(Background jobs to switch off live in “suggested fixes” below.)</i></p>
+      <h2>Where you can become more efficient <span class="help" data-tip="Habit changes to use fewer tokens, based on your own heaviest chats and folders.">?</span></h2>
+      <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders. <i>(Background jobs to switch off live in “suggested fixes” below.)</i></p>
       <div class="sugs" id="suggestions"></div>
-      <h3 class="subhd">Token breakdown <span class="help" data-tip="Every token you've used, split into the four kinds Claude/Codex bill separately: new input you typed or pasted, cache write (context saved for reuse), cache read (that saved context being re-sent), and output the model generated. The mix tells you where to cut.">?</span></h3>
+      <h3 class="subhd">Token breakdown <span class="help" data-tip="Every token split into the four kinds billed separately: input, cache write, cache read, and output. The mix tells you where to cut.">?</span></h3>
       <div id="token-breakdown"></div>
       <div class="effactions">
         <button class="fixbtn" id="eff-compact" title="Paste this into your AI tool to summarize and drop old context — the #1 fix when cache-read tokens are high.">Copy /compact</button>
@@ -671,14 +604,14 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel" id="waste-panel">
-      <h2>Burning tokens — suggested fixes <span class="help" data-tip="Concrete ways to cut your token use. First, fixes based on your own usage mix (the token breakdown above) — these work for anyone. Then any background AI jobs or login agents running on their own that you can switch off (specific to this Mac, reversible).">?</span></h2>
-      <p class="cap"><b>What to change to burn fewer tokens</b> — first tailored to where your tokens actually go, then background jobs to switch off. The habit fixes apply to anyone; the removals are specific to what's running on this Mac.</p>
+      <h2>Burning tokens — suggested fixes <span class="help" data-tip="Concrete ways to cut token use: fixes based on your own usage mix, then background jobs on this Mac you can switch off (reversible).">?</span></h2>
+      <p class="cap"><b>What to change to burn fewer tokens</b> — first tailored to where your tokens actually go, then background jobs to switch off.</p>
       <div id="token-fixes"></div>
       <div id="waste"></div>
     </div>
 
     <div class="panel">
-      <div class="panelhead"><h2>Tracked tools <span class="help" data-tip="Claude Code, Cowork, and Codex are tracked automatically. Other AI tools show up live by process when they run. To also COUNT another tool's tokens, add it here by pointing at its log files.">?</span></h2></div>
+      <div class="panelhead"><h2>Tracked tools <span class="help" data-tip="Claude Code, Cowork, and Codex are tracked automatically. Add any other AI tool by pointing at its log files.">?</span></h2></div>
       <p class="cap">Claude Code, Cowork, and Codex are detected automatically. Aider, Gemini CLI, llama.cpp, and Ollama show up live in “Running now” when their process is active. To <b>count tokens</b> for any other tool, add it below by pointing at its log files.</p>
       <div id="sources"></div>
       <div class="addtool">
@@ -703,7 +636,6 @@ const BASE_COLORS = {"Claude Code":"#d4663a","Cowork":"#6e56cf","Codex":"#10a37f
 const PALETTE = ["#e08a2b","#db2777","#65a30d","#7c3aed","#0891b2","#b45309","#be123c"];
 let TOOLS = [{k:"Claude Code",c:"#d4663a"},{k:"Cowork",c:"#6e56cf"},{k:"Codex",c:"#10a37f"}];
 let COLOR = Object.fromEntries(TOOLS.map(t=>[t.k,t.c]));
-// rebuild the tool list + colors from whatever tools actually have data (incl. custom-added ones)
 function rebuildTools(d){
   const colors = Object.assign({}, BASE_COLORS, d.toolColors||{});
   const order = ["Claude Code","Cowork","Codex"];
@@ -727,11 +659,172 @@ function fmt(n){n=+n||0;
   return String(Math.round(n));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function hlp(tip, cls){ return `<span class="help${cls?(' '+cls):''}" data-tip="${esc(tip)}">?</span>`; }
+function hexA(hex,a){ const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; }
 const pad = n => String(n).padStart(2,"0");
 const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+// smooth-scroll helper (kept off scrollIntoView so nothing outside the page can be scrolled)
+function scrollToEl(el, block){
+  if(!el) return;
+  const r = el.getBoundingClientRect();
+  const y = block==='start'
+    ? r.top + window.pageYOffset - 24
+    : r.top + window.pageYOffset - Math.max(24,(window.innerHeight - r.height)/2);
+  window.scrollTo({top:Math.max(0,y), behavior:'smooth'});
+}
 
 let DAYS = {};       // "YYYY-MM-DD" -> {total, byTool}
 let calY, calM;      // calendar view month
+
+/* ============================================================
+   DEMO FALLBACK — used ONLY when the tracker server is unreachable
+   AND the page isn't being served from localhost (e.g. previewing
+   the file elsewhere). On your Mac, real /api data always wins.
+   ============================================================ */
+const DEMO = {cache:{}};
+function demoAllowed(){
+  const h=location.hostname;
+  return location.protocol==='file:' || (h!=='localhost' && h!=='127.0.0.1' && h!=='[::1]');
+}
+function markDemo(){ const p=$("#demo-pill"); if(p) p.classList.remove("hidden"); }
+function mulberry(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const DEMO_TOOLKEYS=["Claude Code","Cowork","Codex"];
+const DEMO_PROJECTS=["~/code/billing-service","~/code/token-burn","~/work/q3-board-deck","~/code/auth-service","~/code/data-pipeline","~/notes/research","~/code/mobile-app","~/code/infra-terraform"];
+function demoData(){
+  if(DEMO.cache.data) return DEMO.cache.data;
+  const rnd=mulberry(42);
+  const now=new Date();
+  const days=[]; const byTool={"Claude Code":0,"Cowork":0,"Codex":0};
+  for(let i=139;i>=0;i--){
+    const dt=new Date(now); dt.setDate(now.getDate()-i);
+    const dow=dt.getDay(); const wk=(dow===0||dow===6)?0.35:1;
+    const ramp=1+(139-i)/139*1.6;
+    const bt={}; let tot=0;
+    DEMO_TOOLKEYS.forEach((t,ti)=>{
+      const base=[9e6,5e6,3.4e6][ti];
+      let v=Math.round(base*wk*ramp*(0.3+rnd()*1.4));
+      if(rnd()<0.12) v=Math.round(v*0.1);
+      if(i===0) v=Math.round(v*0.35); // partial day so "today" reads believably
+      bt[t]=v; tot+=v; byTool[t]+=v;
+    });
+    const p1=DEMO_PROJECTS[Math.floor(rnd()*DEMO_PROJECTS.length)];
+    let p2=DEMO_PROJECTS[Math.floor(rnd()*DEMO_PROJECTS.length)]; if(p2===p1) p2=DEMO_PROJECTS[(DEMO_PROJECTS.indexOf(p1)+1)%DEMO_PROJECTS.length];
+    days.push({date:isoLocal(dt), total:tot, byTool:bt,
+      topProjects:[[p1.split("/").pop(),Math.round(tot*0.45)],[p2.split("/").pop(),Math.round(tot*0.25)]]});
+  }
+  const grand=days.reduce((s,x)=>s+x.total,0);
+  const byProject=DEMO_PROJECTS.map((name,i)=>{
+    const share=[0.27,0.06,0.16,0.13,0.11,0.09,0.1,0.08][i];
+    const tot=Math.round(grand*share);
+    const tm={}; const split=[[0.7,0.05,0.25],[0.5,0.2,0.3],[0.05,0.9,0.05],[0.35,0.05,0.6],[0.75,0.05,0.2],[0.1,0.85,0.05],[0.55,0.25,0.2],[0.3,0.05,0.65]][i];
+    DEMO_TOOLKEYS.forEach((t,ti)=>{ const v=Math.round(tot*split[ti]); if(v>0) tm[t]=v; });
+    return [name,tot,tm];
+  }).sort((a,b)=>b[1]-a[1]);
+  const dstr=k=>{ const d=new Date(now); d.setDate(now.getDate()-k); return isoLocal(d); };
+  const tstr=(k,h,m)=>{ const d=new Date(now); d.setDate(now.getDate()-k); d.setHours(h,m,0,0); return d.toISOString(); };
+  const bySession=[
+    ["Refactor billing reconciliation into async jobs","billing-service","Claude Code",84e6,null,dstr(0),tstr(0,9,12)],
+    ["Q3 board deck — outline and speaker notes","q3-board-deck","Cowork",41e6,null,dstr(1),tstr(1,15,47)],
+    ["fix flaky auth suite (retry sessions)","auth-service","Codex",32e6,null,dstr(1),tstr(1,11,3)],
+    ["Migrate data pipeline to incremental snapshots","data-pipeline","Claude Code",28e6,null,dstr(3),tstr(3,14,22)],
+    ["Draft launch email + landing page copy","research","Cowork",19e6,null,dstr(4),tstr(4,10,8)],
+    ["Terraform: split staging and prod state","infra-terraform","Codex",14e6,null,dstr(6),tstr(6,16,31)],
+    ["Debug memory leak in websocket relay","billing-service","Claude Code",11e6,null,dstr(7),tstr(7,13,55)],
+    ["Summarize customer interviews (12 calls)","research","Cowork",8.2e6,null,dstr(9),tstr(9,9,40)]
+  ];
+  DEMO.cache.data={
+    generatedAt:new Date().toISOString().slice(0,16),
+    files:214, grand, days, byTool, byProject, bySession,
+    tokenBreakdown:{input:38e6, cache_read:812e6, cache_write:214e6, output:96e6},
+    insights:demoInsights(), warnings:[], customSources:[], toolColors:{},
+    update:{outdated:false}
+  };
+  return DEMO.cache.data;
+}
+function demoInsights(){
+  return {
+    suggestions:[
+      {tag:"Context", text:"Your three heaviest chats are all long-running threads — carry the context into a fresh chat when a task changes instead of continuing week-old ones.",
+        revealLabel:"See the chats", reveal:"Refactor billing reconciliation — 84M tokens\nQ3 board deck — 41M tokens\nfix flaky auth suite — 32M tokens"},
+      {tag:"Scope", text:"~/code/billing-service alone burns 27% of all tokens. Add a CLAUDE.md with the repo map so each session stops re-reading the whole tree."},
+      {tag:"Habit", text:"Most output tokens come from full-file rewrites — ask for diffs (“just the change”) instead of regenerated files."}
+    ],
+    waste:[
+      {label:"Nightly repo summarizer (launchd)", metric:"~2.1M tokens/night · last ran 03:00",
+        what:"A login agent that re-summarizes your repositories every night.",
+        usage:"Ran 14 of the last 14 nights, even with no code changes on 9 of them.",
+        impact:"Stops the nightly burn (~63M tokens/month). Nothing else changes; fully reversible.",
+        executable:true, agent:"com.user.repo-summary"},
+      {label:"Cowork auto-retry on rate limits", metric:"~450K tokens/week re-sent",
+        what:"Cowork re-sends the full conversation every time a rate-limited call retries.",
+        usage:"312 retries in the last 7 days, mostly between 2–4 PM.",
+        impact:"Retries would send only the failed call, not the whole thread.",
+        how:"In Cowork → Settings → Advanced, set “On rate limit” to “wait and resume” instead of “retry request”."}
+    ]
+  };
+}
+function demoLive(){
+  const t=new Date();
+  return {
+    at:`${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`,
+    burn:{perMin:96000,tokens:940000,windowMin:10},
+    system:{aiCpu:41,load:6.2,cores:12,aiRamMB:9110,memUsedGB:24.1,memTotalGB:48},
+    running:[
+      {tool:"Claude Code",title:"Refactor billing reconciliation into async jobs",burnMin:84000,meta:"38% CPU · 2.1 GB · 12m"},
+      {tool:"Cowork",title:"Q3 board deck — outline and speaker notes",burnMin:9400,meta:"11% CPU · 890 MB · 4m"},
+      {tool:"Codex",title:"fix flaky auth suite (retry sessions)",burnMin:2800,meta:"6% CPU · 1.3 GB · 26m"}
+    ],
+    idle:[{tool:"Codex",count:2,uptime:"3h",ram:"410 MB"}],
+    leftovers:{count:2,freedMB:840},
+    insights:demoInsights()
+  };
+}
+function demoAgents(){
+  return {runs:[
+    {file:null,title:"Refactor billing reconciliation into async jobs",tool:"Claude Code",status:"active",ago:34,
+      toolCalls:127,patches:9,mcp:12,reasoning:31,
+      topTools:[["Edit",38],["Bash",29],["Read",24],["MCP·browser_batch",12]],
+      subagents:[{type:"general-purpose",desc:"Scan repo for reconciliation call-sites"},{type:"test-runner",desc:"Run billing test suite after each patch"}],
+      recent:["Edit reconcile.ts","Bash npm test","TaskUpdate: mark step 3 done"]},
+    {file:null,title:"Q3 board deck — outline and speaker notes",tool:"Cowork",status:"active",ago:110,
+      toolCalls:41,patches:0,mcp:18,reasoning:12,
+      topTools:[["MCP·read_page",9],["MCP·navigate",6],["Write",8]],
+      subagents:[],recent:["MCP navigate notion.so","Write outline.md"]},
+    {file:null,title:"fix flaky auth suite (retry sessions)",tool:"Codex",status:"idle",ago:1560,
+      toolCalls:63,patches:4,mcp:0,reasoning:20,
+      topTools:[["Shell",30],["Edit",21],["Read",12]],
+      subagents:[],recent:["Shell pytest -k auth","Edit conftest.py"]}
+  ]};
+}
+function demoSeries(range){
+  const d=demoData();
+  if(range==='1d'){
+    const rnd=mulberry(7); const buckets=[]; const now=new Date();
+    for(let h=23;h>=0;h--){
+      const t=new Date(now); t.setMinutes(0,0,0); t.setHours(now.getHours()-h);
+      const hh=t.getHours(); const act=(hh>=9&&hh<=19)?1:(hh>=7?0.35:0.05);
+      const tools={};
+      DEMO_TOOLKEYS.forEach((k,ti)=>{ const v=Math.round([9e5,5e5,3e5][ti]*act*(0.2+rnd()*1.6)); if(v>2e4) tools[k]=v; });
+      buckets.push({ts:t.getTime(),tools});
+    }
+    return {range,unit:'hour',buckets,scale:'linear'};
+  }
+  let sel;
+  if(range==='5d') sel=d.days.slice(-5);
+  else if(range==='1m') sel=d.days.slice(-30);
+  else sel=d.days;
+  return {range,unit:'day',buckets:sel.map(x=>({ts:new Date(x.date+"T12:00:00").getTime(),tools:x.byTool})),scale:'linear'};
+}
+function demoPayload(url){
+  markDemo();
+  if(url.indexOf('/api/series')===0){ const m=/range=([a-z0-9]+)/.exec(url); return demoSeries(m?m[1]:'1m'); }
+  if(url.indexOf('/api/live')===0) return demoLive();
+  if(url.indexOf('/api/agents')===0) return demoAgents();
+  return demoData();
+}
+async function apiJSON(url){
+  try{ const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw new Error("http "+r.status); return await r.json(); }
+  catch(e){ if(demoAllowed()) return demoPayload(url); throw e; }
+}
 
 // ---- update-available banner (in-memory dismiss only — no localStorage/sessionStorage) ----
 let UPDATE_DISMISSED = false;
@@ -753,10 +846,8 @@ function renderUpdateBanner(u){
   if(dismissBtn) dismissBtn.addEventListener("click", ()=>{ UPDATE_DISMISSED=true; el.classList.add("hidden"); });
 })();
 
-// ---- full-screen "update available" popup — a bigger, hard-to-miss version of the banner
-// above. Shown once per page session on initial load (if outdated), and again whenever a
-// manual Rescan finds a newer version. Closing is in-memory only (no localStorage/sessionStorage) ----
-let UPDATE_MODAL_SHOWN = false;   // guards the once-per-session auto-show from render(d)
+// ---- full-screen "update available" popup ----
+let UPDATE_MODAL_SHOWN = false;
 function showUpdateModal(u){
   if(!u || !u.outdated) return;
   const ov=$("#update-modal"); if(!ov) return;
@@ -769,8 +860,6 @@ function showUpdateModal(u){
   ov.classList.remove("hidden");
 }
 function hideUpdateModal(){ const ov=$("#update-modal"); if(ov) ov.classList.add("hidden"); }
-// One-click update: ask the server to download the newest version, verify it, and restart itself;
-// then wait for it to come back and reload. No Terminal. Falls back to the manual command on error.
 async function doSelfUpdate(){
   const btn=$("#um-now"), st=$("#um-status");
   if(btn){ btn.disabled=true; btn.textContent="Updating…"; }
@@ -787,7 +876,7 @@ async function doSelfUpdate(){
     return;
   }
   if(st) st.textContent="Installing and restarting…";
-  await new Promise(res=>setTimeout(res,3200));   // let the old server exit and the new one boot
+  await new Promise(res=>setTimeout(res,3200));
   let tries=0;
   const poll=setInterval(async ()=>{
     tries++;
@@ -819,7 +908,7 @@ async function doSelfUpdate(){
 
 async function load(){
   let d;
-  try{ d = await (await fetch("/api/data")).json(); }
+  try{ d = await apiJSON("/api/data"); }
   catch(e){ $("#lmsg").textContent="Can't reach the tracker server."; return; }
   if(d.error){ $("#loading").innerHTML='<span style="color:#c0392b">Error: '+esc(d.error.split("\n")[0])+'</span>'; }
   if(d.loading){
@@ -841,6 +930,7 @@ function render(d){
 
   // ---- period totals (calendar-based) ----
   const now = new Date();
+  try{ $("#hero-date").textContent = now.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}); }catch(e){}
   const today = isoLocal(now);
   const wkStart = new Date(now); wkStart.setDate(now.getDate() - now.getDay()); // Sunday
   const weekStart = isoLocal(wkStart);
@@ -862,14 +952,24 @@ function render(d){
   renderUpdateBanner(d.update);
   if(d.update && d.update.outdated && !UPDATE_MODAL_SHOWN){ UPDATE_MODAL_SHOWN=true; showUpdateModal(d.update); }
 
-  $("#tools").innerHTML = TOOLS.filter(t=>d.byTool&&d.byTool[t.k]).map(t=>
-    `<span class="chip"><span class="dot" style="background:${t.c}"></span>${t.k}: <b>${fmt(d.byTool[t.k])}</b></span>`).join("");
+  // tool split bar + legend
+  (function(){
+    const el=$("#tools"); if(!el) return;
+    const items=TOOLS.filter(t=>d.byTool&&d.byTool[t.k]);
+    if(!items.length){ el.innerHTML=""; return; }
+    const tot=items.reduce((s,t)=>s+d.byTool[t.k],0)||1;
+    const segs=items.map(t=>`<span style="width:${(d.byTool[t.k]/tot*100).toFixed(2)}%;background:${t.c}" title="${esc(t.k)}: ${fmt(d.byTool[t.k])}"></span>`).join("");
+    const leg=items.map(t=>`<span class="slg"><span class="dot" style="background:${t.c}"></span>${esc(t.k)}<b>${fmt(d.byTool[t.k])}</b></span>`).join("");
+    el.innerHTML=`<div class="splitbar">${segs}</div><div class="splitleg">${leg}</div>`;
+  })();
+
   $("#warnings").innerHTML = (d.warnings||[]).length
     ? `<div class="warnbar">⚠ ${d.warnings.map(esc).join("<br>")}</div>` : "";
 
   if(calY===undefined){ calY=now.getFullYear(); calM=now.getMonth(); }
   renderCalendar();
   loadSeries(TS_RANGE);
+  loadSpark();
   renderProjects(d.byProject||[]);
   renderWhy(d.bySession||[]);
   renderTop10(d.days||[]);
@@ -881,7 +981,6 @@ function render(d){
 
 // ---- calendar ----
 function calLevel(t){ if(t<1)return 0; if(t<1e6)return 1; if(t<1e7)return 2; if(t<5e7)return 3; return 4; }
-const CAL_BG = ["#fafbf9","#f3dcdc","#e0a0a0","#c2504f","#9c2a2c"];
 function renderCalendar(){
   $("#cal-title").textContent = `${MONTHS[calM]} ${calY}`;
   const grid = $("#cal"); grid.innerHTML="";
@@ -897,7 +996,7 @@ function renderCalendar(){
     const lvl = calLevel(tot);
     const cell = document.createElement("div");
     const isToday = ds===today;
-    cell.className = "cell heat"+lvl+(lvl>=3?" dark":"")+(isToday?" today":"")+(ds>today?" future":"");
+    cell.className = "cell heat"+lvl+(isToday?" today":"")+(ds>today?" future":"");
     cell.title = `${ds}: ${fmt(tot)} tokens`;
     cell.innerHTML = (isToday?`<span class="todaytag">TODAY</span>`:"")+`<span class="d">${dd}</span>`+(tot>0?`<span class="t">${fmt(tot)}</span>`:"");
     grid.appendChild(cell);
@@ -908,13 +1007,46 @@ $("#cal-prev").addEventListener("click",()=>{ calM--; if(calM<0){calM=11;calY--;
 $("#cal-next").addEventListener("click",()=>{ calM++; if(calM>11){calM=0;calY++;} renderCalendar(); });
 $("#cal-today").addEventListener("click",()=>{ const n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); renderCalendar(); });
 
+// ---- smooth path helper (midpoint cubic — no vertical overshoot) ----
+function smoothPathD(pts){
+  if(!pts || pts.length<2) return null;
+  let d=`M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1], c=pts[i], mx=((a[0]+c[0])/2).toFixed(1);
+    d+=`C${mx},${a[1].toFixed(1)} ${mx},${c[1].toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+// ---- hero sparkline (last 24h, all tools combined) ----
+async function loadSpark(){
+  try{ const data=await apiJSON('/api/series?range=1d'); drawSpark((data&&data.buckets)||[]); }catch(e){}
+}
+function drawSpark(buckets){
+  const svg=$("#spark-svg"); if(!svg) return; svg.innerHTML="";
+  const W=340,H=60;
+  svgEl("line",{x1:0,y1:H-1,x2:W,y2:H-1,stroke:"var(--rule)","stroke-width":1},svg);
+  if(!buckets.length) return;
+  const tot=buckets.map(b=>{let s=0;const t=b.tools||{};for(const k in t)s+=t[k];return s;});
+  const max=Math.max.apply(null,tot.concat([1]));
+  const n=tot.length;
+  const pts=tot.map((v,i)=>[ (n<=1?0.5:i/(n-1))*W, 6+(1-v/max)*(H-10) ]);
+  const dp=smoothPathD(pts);
+  if(dp){
+    svgEl("path",{d:dp+`L${W},${H-1}L0,${H-1}Z`,fill:"rgba(var(--accent-rgb),.07)",stroke:"none"},svg);
+    svgEl("path",{d:dp,fill:"none",stroke:"var(--accent)","stroke-width":1.8,"stroke-linecap":"round","stroke-linejoin":"round"},svg);
+  }
+  const last=pts[n-1];
+  svgEl("circle",{cx:last[0],cy:last[1],r:3,fill:"var(--accent)"},svg);
+}
+
 // ---- time series (stock-style ranges, live) ----
 let TS_RANGE = "1m";
 function niceMax(v){ const e=Math.pow(10,Math.floor(Math.log10(v))); const m=v/e; return (m<=1?1:m<=2?2:m<=5?5:10)*e; }
 function tsLabel(ts, unit, range){
   const d=new Date(ts);
   if(unit==='hour'){
-    if(range==='1d'){ return d.getHours()+':00'; }   // 24-hour: 9:00, 14:00
+    if(range==='1d'){ return d.getHours()+':00'; }
     return (d.getMonth()+1)+'/'+d.getDate();
   }
   if(range==='1m') return (d.getMonth()+1)+'/'+d.getDate();
@@ -923,7 +1055,7 @@ function tsLabel(ts, unit, range){
 async function loadSeries(range){
   TS_RANGE = range || TS_RANGE;
   document.querySelectorAll('#ts-range button').forEach(b=>b.classList.toggle('on', b.dataset.r===TS_RANGE));
-  try{ drawSeries(await (await fetch('/api/series?range='+encodeURIComponent(TS_RANGE))).json()); }catch(e){}
+  try{ drawSeries(await apiJSON('/api/series?range='+encodeURIComponent(TS_RANGE))); }catch(e){}
 }
 function drawSeries(data){
   const svg=$("#ts-svg"); svg.innerHTML="";
@@ -950,9 +1082,15 @@ function drawSeries(data){
     const lab=tsLabel(b.ts,data.unit,data.range); if(lab===lastLab) return; lastLab=lab;
     svgEl("text",{x:xAt(i),y:H-8,"text-anchor":"middle",class:"ticklbl"},svgEl("g",{class:"tick"},svg)).textContent=lab; });
   TOOLS.forEach(t=>{ let seg=[];
-    const flush=()=>{ if(seg.length>1) svgEl("polyline",{points:seg.join(" "),fill:"none",stroke:t.c,"stroke-width":1.8,"stroke-linejoin":"round","stroke-linecap":"round"},svg);
-      else if(seg.length===1){const[x,y]=seg[0].split(",");svgEl("circle",{cx:x,cy:y,r:2.2,fill:t.c},svg);} seg=[]; };
-    buckets.forEach((b,i)=>{ const v=(b.tools||{})[t.k]||0; if(v>0) seg.push(`${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`); else flush(); });
+    const flush=()=>{
+      if(seg.length>1){
+        const dp=smoothPathD(seg);
+        const y0=(T+plotH).toFixed(1);
+        svgEl("path",{d:dp+`L${seg[seg.length-1][0].toFixed(1)},${y0}L${seg[0][0].toFixed(1)},${y0}Z`,fill:hexA(t.c,.08),stroke:"none"},svg);
+        svgEl("path",{d:dp,fill:"none",stroke:t.c,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"},svg);
+      } else if(seg.length===1){ svgEl("circle",{cx:seg[0][0],cy:seg[0][1],r:2.4,fill:t.c},svg); }
+      seg=[]; };
+    buckets.forEach((b,i)=>{ const v=(b.tools||{})[t.k]||0; if(v>0) seg.push([xAt(i),yAt(v)]); else flush(); });
     flush(); });
   $("#ts-legend").innerHTML=TOOLS.map(t=>`<span style="display:flex;gap:5px;align-items:center"><span class="dot" style="background:${t.c}"></span>${t.k}</span>`).join("");
   const rl={"1d":"last 24 hours","5d":"last 5 days","1m":"last 30 days","all":"all time"}[data.range]||"";
@@ -1028,10 +1166,8 @@ function renderTop10(days){
   });
 }
 
-// ---- token breakdown (input / cache write / cache read / output) ----
-// ---- data-driven "suggested fixes" from the token mix (universal; personalized by each user's own %) ----
+// ---- token breakdown + data-driven fixes ----
 function copyFixCmd(btn,text){ try{ navigator.clipboard.writeText(text); const o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(()=>{btn.textContent=o;},1500);}catch(e){ btn.textContent="Copy failed"; } }
-// Copy longer text stored in a data-copy attribute (avoids quoting a full prompt inside onclick).
 function copyAttr(btn){
   const t=btn.getAttribute('data-copy')||'';
   try{ navigator.clipboard.writeText(t); const o=btn.getAttribute('data-label')||btn.textContent;
@@ -1039,7 +1175,6 @@ function copyAttr(btn){
     setTimeout(()=>{btn.textContent=o;btn.classList.remove('ok');},1600);
   }catch(e){ btn.textContent="Copy failed"; }
 }
-// A short date label matching how the apps group chats (Today / Yesterday / "Jun 30").
 function shortDate(iso){
   if(!iso) return "";
   const p=String(iso).split("-"); if(p.length<3) return "";
@@ -1051,15 +1186,11 @@ function shortDate(iso){
   const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(+p[1])-1];
   return m ? `${m} ${(+p[2])}` : "";
 }
-// Time-of-day from the session's last-active timestamp (transcript mtime), e.g. "3:47 PM".
 function timeOf(iso){
   if(!iso) return "";
   const d=new Date(iso); if(isNaN(d.getTime())) return "";
   try{ return d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); }catch(e){ return ""; }
 }
-// Top up-to-3 heaviest chats — tool (LLM) + date + time + how the chat opened — so you can spot each one in
-// your sidebar's date groups. (These apps auto-title chats with their own model and don't expose that
-// title or a deep-link on disk, so we identify each chat by its date + opening line.)
 function chatListHTML(sessions){
   const list=(sessions||[]).filter(s=>s && s[0]).slice(0,3);
   if(!list.length) return "";
@@ -1087,7 +1218,6 @@ function renderTokenFixes(bd, sessions){
   if(pct(cr)>=40){
     const list=chatListHTML(sessions);
     const cc=[...new Set((sessions||[]).filter(s=>s&&s[0]).slice(0,3).map(s=>String(s[2]||"")))].some(t=>/claude\s*code/i.test(t));
-    // Universal, lossless fix: have the AI itself compress the thread into a carry-over note, then continue in a fresh chat.
     const HANDOFF="Write a compact handoff note I can paste into a NEW chat to continue this exact work with full context — include the goal, the key decisions so far, the current state, the files/links involved, and the immediate next step. Keep it tight; don’t re-explain the whole history.";
     const solution=`<div class="fixsol">
       <div class="fixstep"><span class="fixnum">1</span><div>In the heavy chat, paste this once — it turns the whole thread into one short carry-over note:
@@ -1138,7 +1268,6 @@ function renderTokenBreakdown(bd){
       `<div class="tbtrack" title="${esc(c.label)}: ${fmt(v)} tokens (${pct.toFixed(1)}%)"><div class="tbfill" style="width:${Math.max(pct,v>0?0.6:0).toFixed(1)}%"></div></div>`+
       `</div>`;
   }).join("");
-  // pick whichever category is the largest share and show a matching, data-driven tip
   const top = cats.reduce((a,c)=> (+bd[c.k]||0) > (+bd[a.k]||0) ? c : a, cats[0]);
   const topPct = total>0 ? ((+bd[top.k]||0)/total*100) : 0;
   let tip;
@@ -1157,39 +1286,40 @@ function renderTokenBreakdown(bd){
     `<div class="tbtip"><span class="tbtag">Tip</span><div>${tip}</div></div>`;
 }
 
-// ---- efficiency action bar: copy /compact, jump to cleanup ----
+// ---- efficiency action bar ----
 (function(){
   const cb=$("#eff-compact"), sb=$("#eff-scroll-waste"), st=$("#eff-status");
   if(cb) cb.addEventListener("click", async ()=>{
     try{ await navigator.clipboard.writeText("/compact"); if(st){ st.className="fixstatus ok"; st.textContent="Copied ✓"; setTimeout(()=>{ if(st.textContent==="Copied ✓") st.textContent=""; },1800); } }
     catch(e){ if(st){ st.className="fixstatus err"; st.textContent="Couldn't copy — select and copy manually."; } }
   });
-  if(sb) sb.addEventListener("click", ()=>{
-    const target=$("#waste-panel"); if(target) target.scrollIntoView({behavior:"smooth", block:"start"});
-  });
+  if(sb) sb.addEventListener("click", ()=>{ scrollToEl($("#waste-panel"), 'start'); });
 })();
 
 // ---- running now (merged: chats + processes, one titled list) ----
 function renderLive(d){
   d=d||{};
   $("#live-at").textContent = d.at ? ("as of "+d.at) : "";
-  // ---- system + burn strip ----
-  const strip=$("#live-strip"); const b=d.burn||{}; const sy=d.system||{};
-  const ramGB = sy.aiRamMB!=null ? (sy.aiRamMB>=1024?(sy.aiRamMB/1024).toFixed(1)+" GB":Math.round(sy.aiRamMB)+" MB") : "—";
-  const memSub = (sy.memUsedGB!=null&&sy.memTotalGB!=null) ? `${sy.memUsedGB} / ${sy.memTotalGB} GB used` : "";
-  const loadSub = (sy.load!=null&&sy.cores) ? `load ${sy.load} · ${sy.cores} cores` : "";
-  if(!strip.dataset.built){
-    strip.innerHTML =
-      `<div class="lstat fire"><div class="lk">Burning now ${hlp("How fast you're using tokens right now — a per-minute rate averaged over the last 10 minutes. Think of it as a speedometer for token spend; the small number is the total in those 10 minutes.")}</div><div class="lv" id="lv-burn">—</div><div class="lsub" id="ls-burn"></div></div>`+
-      `<div class="lstat"><div class="lk">AI CPU ${hlp("Share of your Mac's processor being used by AI tools right now. 'load' is how busy the whole machine is, across your CPU cores.")}</div><div class="lv" id="lv-cpu">—</div><div class="lsub" id="ls-cpu"></div></div>`+
-      `<div class="lstat"><div class="lk">AI memory ${hlp("How much RAM (memory) all your AI tools are using together right now.")}</div><div class="lv" id="lv-mem">—</div><div class="lsub">across AI processes</div></div>`+
-      `<div class="lstat"><div class="lk">System memory ${hlp("How much of your Mac's total memory is in use right now (by everything, not just AI).")}</div><div class="lv" id="lv-sys">—</div><div class="lsub" id="ls-sys"></div></div>`;
-    strip.dataset.built = "1";
+  const b=d.burn||{}; const sy=d.system||{};
+  // hero burn chip
+  const hl=$("#hero-live"), hb=$("#hero-burn");
+  if(hl && hb){
+    const pm=+b.perMin||0;
+    if(pm>0){
+      hb.textContent=`burning ${fmt(pm)}/min right now`;
+      hl.title=`${fmt(b.tokens||0)} tokens in the last ${b.windowMin||10} min`;
+      hl.classList.remove("hidden");
+    } else hl.classList.add("hidden");
   }
-  $("#lv-burn").textContent = fmt(b.perMin||0)+"/min"; $("#ls-burn").textContent = `${fmt(b.tokens||0)} in last ${b.windowMin||10} min`;
-  $("#lv-cpu").textContent = (sy.aiCpu!=null?sy.aiCpu:0)+"%"; $("#ls-cpu").textContent = loadSub;
-  $("#lv-mem").textContent = ramGB;
-  $("#lv-sys").textContent = (sy.memUsedGB!=null?sy.memUsedGB+" GB":"—"); $("#ls-sys").textContent = memSub;
+  // inline system stats in the Running-now header
+  const lm=$("#live-meta");
+  if(lm){
+    const parts=[];
+    if(sy.aiCpu!=null) parts.push(`AI CPU ${sy.aiCpu}%`);
+    if(sy.aiRamMB!=null) parts.push(`AI RAM ${sy.aiRamMB>=1024?(sy.aiRamMB/1024).toFixed(1)+" GB":Math.round(sy.aiRamMB)+" MB"}`);
+    if(sy.memUsedGB!=null&&sy.memTotalGB!=null) parts.push(`system ${sy.memUsedGB} / ${sy.memTotalGB} GB`);
+    lm.textContent=parts.join(" · ");
+  }
   const el=$("#running"), r=d.running||[];
   if(!r.length){ el.innerHTML='<div class="livenote">Nothing active in the last 10 minutes.</div>'; }
   else{
@@ -1212,21 +1342,15 @@ function renderLive(d){
       `<button class="fixbtn" onclick="quitLeftovers(this)">Quit idle leftovers</button>${hlp("Ends stray, idle AI processes (0% CPU) that are just sitting in memory — usually leftovers from finished tasks or automations. It frees memory and will NOT touch the sessions you're actively using.")}<span class="fixstatus"></span></div>`;
   }
   idle.innerHTML = idleHtml;
-  // live insights so removals (automations / login agents) disappear within seconds
   if(d.insights) renderInsights(d.insights);
 }
-async function pollLive(){ try{ renderLive(await (await fetch("/api/live")).json()); }catch(e){} }
+async function pollLive(){ try{ renderLive(await apiJSON("/api/live")); }catch(e){} }
 
 // ---- sub-agents & agent activity ----
-// Collapsed by default: each run is one summary line (title, tool, status, small hover-able
-// counts). Click a row to expand the full detail (tools touched, patches, sub-agents, feed).
-// Expand state persists across the 8s live poll, keyed by the run's log file path.
 function agoShort(s){ s=+s||0; return s<60?s+"s":(s<3600?Math.round(s/60)+"m":Math.round(s/3600)+"h"); }
-const AGENTS_OPEN = new Set();   // set of r.file keys currently expanded
+const AGENTS_OPEN = new Set();
 function runKey(r,i){ return r.file || (r.tool+'|'+r.title+'|'+i); }
 const SVG_CHEVRON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
-
-// ---- tool-name glossary: plain-English "what is this?" for the .achip / .acount hover tooltips ----
 const MCP_SUFFIX_GLOSSARY = {
   browser_batch: "drives the web browser (click/type/navigate)",
   computer: "controls mouse, keyboard, and screenshots",
@@ -1262,19 +1386,14 @@ function renderAgents(runs){
     const c=COLOR[r.tool]||"#999";
     const nTools=(r.topTools||[]).length;
     const nSub=(r.subagents||[]).length;
-
-    // ---- collapsed summary: title + small hover-tooltip'd counts ----
     const summary=[];
-    if(r.toolCalls) summary.push(`<span class="acount" title="${r.toolCalls} tool call${r.toolCalls>1?'s':''} across ${nTools} distinct tool${nTools===1?'':'s'} — click to see which ones">⚙ <b>${r.toolCalls}</b></span>`);
-    if(r.patches) summary.push(`<span class="acount" title="${r.patches} code patch${r.patches>1?'es':''} applied by this run — click to see the timeline">✎ <b>${r.patches}</b></span>`);
-    if(nSub) summary.push(`<span class="acount" title="${nSub} sub-agent${nSub>1?'s':''} spawned by this run — click to see what each one did">▸ <b>${nSub}</b></span>`);
-    if(r.mcp) summary.push(`<span class="acount" title="${r.mcp} MCP tool call${r.mcp>1?'s':''} — ${toolTip('MCP·')}">⇄ <b>${r.mcp}</b></span>`);
-
+    if(r.toolCalls) summary.push(`<span class="acount" title="${r.toolCalls} tool call${r.toolCalls>1?'s':''} across ${nTools} distinct tool${nTools===1?'':'s'} — click to see which ones">⚙ <b>${r.toolCalls}</b>&nbsp;tool call${r.toolCalls>1?'s':''}</span>`);
+    if(r.patches) summary.push(`<span class="acount" title="${r.patches} code patch${r.patches>1?'es':''} applied by this run — click to see the timeline">✎ <b>${r.patches}</b>&nbsp;code edit${r.patches>1?'s':''}</span>`);
+    if(nSub) summary.push(`<span class="acount" title="${nSub} sub-agent${nSub>1?'s':''} spawned by this run — helper agents it started to work in parallel. Click to see what each one did">▸ <b>${nSub}</b>&nbsp;sub-agent${nSub>1?'s':''}</span>`);
+    if(r.mcp) summary.push(`<span class="acount" title="${r.mcp} MCP call${r.mcp>1?'s':''} — ${toolTip('MCP·')}">⇄ <b>${r.mcp}</b>&nbsp;MCP</span>`);
     const titleHtml = r.file
       ? `<a class="atitle alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" title="Open this chat's full transcript in a new tab" onclick="event.stopPropagation()">${esc(r.title)} ↗</a>`
       : `<span class="atitle" title="${esc(r.title)}">${esc(r.title)}</span>`;
-
-    // ---- expanded detail: unchanged from before, just hidden until opened ----
     const transcriptLink = r.file
       ? `<div class="adetail-open"><a class="alink" href="/transcript?file=${encodeURIComponent(r.file)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><b>Open full transcript ↗</b></a> <span style="color:var(--muted)">— See every tool call in order.</span></div>`
       : "";
@@ -1287,7 +1406,6 @@ function renderAgents(runs){
     const subs=(r.subagents||[]).length ? `<div class="asub"><div class="salabel">Sub-agents (${r.subagents.length})</div>`+
        r.subagents.map(s=>`<div class="sa"><span class="saty">▸</span><span>${esc(s.desc||s.type||'sub-agent')}${s.type?` <span style="color:var(--muted)">(${esc(s.type)})</span>`:''}</span></div>`).join("")+`</div>` : "";
     const feed=(r.recent||[]).length ? `<div class="afeed">${r.recent.map(x=>esc(x)).join(" &nbsp;·&nbsp; ")}</div>` : "";
-
     return `<div class="arun${open?' open':''}" data-key="${esc(key)}"><div class="ahead">`+
       `<span class="achev">${SVG_CHEVRON}</span>`+
       `<span class="dot" style="background:${c}" title="${esc(r.tool)}"></span>`+
@@ -1301,14 +1419,13 @@ function renderAgents(runs){
       `</div>`;
   }).join("");
 }
-// one delegated listener handles clicks for every row, including ones added by later polls
 document.getElementById("agents").addEventListener("click", e=>{
   const row=e.target.closest(".arun"); if(!row) return;
   const key=row.dataset.key;
   if(AGENTS_OPEN.has(key)){ AGENTS_OPEN.delete(key); row.classList.remove("open"); }
   else { AGENTS_OPEN.add(key); row.classList.add("open"); }
 });
-async function pollAgents(){ try{ const d=await (await fetch("/api/agents")).json(); renderAgents(d.runs); }catch(e){} }
+async function pollAgents(){ try{ const d=await apiJSON("/api/agents"); renderAgents(d.runs); }catch(e){} }
 
 // ---- efficiency (ranked) + waste (one-click fix) ----
 const FIX_TOKEN = "__FIX_TOKEN__";
@@ -1341,8 +1458,8 @@ function renderInsights(ins){
     }).join("")
       : '<div class="wnote">✓ Nothing flagged — no background AI automations or login agents are burning tokens unattended.</div>'; }
 }
-// ---- jump to the "add a tool" form (from the empty-state banner or the top link) ----
-function goAddTool(){ const el=$("#src-name"); if(!el) return; const p=(el.closest&&el.closest('.panel'))||el; p.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>{try{el.focus();}catch(e){}},420); }
+// ---- jump to the "add a tool" form ----
+function goAddTool(){ const el=$("#src-name"); if(!el) return; const p=(el.closest&&el.closest('.panel'))||el; scrollToEl(p); setTimeout(()=>{try{el.focus();}catch(e){}},420); }
 document.addEventListener('click',e=>{ const t=e.target.closest&&e.target.closest('#empty-add,#add-tool-top'); if(t){ e.preventDefault(); goAddTool(); } });
 // ---- tracked tools (custom sources) ----
 function renderSources(d){
@@ -1402,14 +1519,12 @@ $("#refresh").addEventListener("click",async()=>{
   $("#loading").classList.remove("hidden"); $("#lmsg").textContent="Rescanning…";
   try{ await fetch("/api/refresh"); }catch(e){}
   setTimeout(load, 600);
-  // also force a fresh (uncached) update check — lets a Rescan surface a just-published
-  // release immediately instead of waiting on the ~1h cache. Never allowed to break rescan.
   try{
     const u = await (await fetch("/api/checkupdate")).json();
     if(u && u.outdated) showUpdateModal(u);
   }catch(e){}
 });
-// suppress hover tooltips while scrolling (stops the dark tooltip flashing past the cursor)
+// suppress hover tooltips while scrolling
 (function(){ let t; addEventListener('scroll', ()=>{ document.body.classList.add('is-scrolling'); clearTimeout(t); t=setTimeout(()=>document.body.classList.remove('is-scrolling'), 220); }, {passive:true}); })();
 // theme switcher (Light / Dark / Soft), saved per person
 (function(){
@@ -1420,13 +1535,12 @@ $("#refresh").addEventListener("click",async()=>{
     const b=e.target.closest('button'); if(!b) return;
     const t=b.dataset.theme; document.documentElement.dataset.theme=t;
     try{ localStorage.setItem('tbTheme', t); }catch(e){} setOn(t);
-    // choosing a theme clears any custom Primary background so the theme's own surface shows
     document.documentElement.style.removeProperty('--bg');
     document.querySelectorAll('#primary-pick .psw').forEach(x=>x.classList.remove('on'));
     fetch('/api/theme',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({primary:""})}).catch(()=>{});
   });
 })();
-// color pickers — Primary (background) + Secondary (highlight). Dashboard applies live; widget reads them from its feed.
+// color pickers — Primary (background) + Secondary (highlight)
 (function(){
   function post(body){ fetch('/api/theme',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>{}); }
   const ab=document.getElementById('accent-pick');
@@ -1452,7 +1566,7 @@ $("#refresh").addEventListener("click",async()=>{
     if(k==='overview'){ window.scrollTo({top:0,behavior:'smooth'}); return; }
     const h=[...document.querySelectorAll('.panel h2')].find(x=>x.textContent.includes(k));
     const target = h ? (h.closest('.panel') || h) : null;
-    if(target) target.scrollIntoView({behavior:'smooth', block:'center'});  // center the section in the viewport
+    if(target) scrollToEl(target);
   });
 })();
 // customize layout — show / hide / reorder sections, saved per person
@@ -1497,7 +1611,7 @@ $("#refresh").addEventListener("click",async()=>{
 })();
 load();
 pollLive(); pollAgents();
-setInterval(()=>{ pollLive(); pollAgents(); loadSeries(TS_RANGE); }, 8000);
+setInterval(()=>{ pollLive(); pollAgents(); loadSeries(TS_RANGE); loadSpark(); }, 8000);
 </script>
 </body>
 </html>
