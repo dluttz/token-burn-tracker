@@ -523,7 +523,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </span>
   </div>
   <button class="customizebtn" id="customize-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 18h6"/><path d="M14 12h6M4 12h4"/><circle cx="17" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>Customize layout</button>
-  <div class="navfoot"><span class="pulse"></span> 100% local · nothing leaves your Mac · v1.0.0</div>
+  <div class="navfoot"><span class="pulse"></span> Local-first · your prompts never leave your Mac</div>
 </nav>
 <div class="modal-overlay" id="layout-modal" style="display:none">
   <div class="modal">
@@ -876,7 +876,7 @@ function render(d){
   renderInsights(d.insights);
   renderTokenBreakdown(d.tokenBreakdown);
   renderTokenFixes(d.tokenBreakdown, d.bySession);
-  $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; nothing leaves your Mac.`;
+  $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; your prompts and chats never leave your Mac.`;
 }
 
 // ---- calendar ----

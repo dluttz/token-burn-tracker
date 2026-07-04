@@ -1,7 +1,7 @@
 # Token Burn Tracker
 
-A **100% local** dashboard that shows how many tokens your AI coding tools are
-burning — live, on your own Mac. No account and no cloud — your prompts and token data stay on your Mac.
+A **local-first** dashboard that shows how many tokens your AI coding tools are
+burning — live, on your own Mac. No account, no sign-in — your prompts and chats never leave your Mac.
 
 Works with **Claude Code**, **Cowork**, and **Codex** out of the box, and you can
 add other tools yourself.
@@ -73,10 +73,10 @@ It reads the local log files your AI tools already write:
 The dashboard can display your **chat titles and full transcripts** so you can see
 where tokens went. **All of this is rendered locally in your browser.**
 
-- **Your prompts, logs, and token counts never leave your Mac** — they're read and
+- **Your prompts, chat titles, and file paths never leave your Mac** — they're read and
   rendered locally, never uploaded. The app does send **anonymous, aggregate usage
-  stats** (a random install ID, app + macOS version, and which integrations you use —
-  never any content) to help improve it. Turn it off with `TOKENBURN_ANALYTICS=off`.
+  stats** (a random install ID, app + macOS version, which tools you use, and aggregate
+  token totals + efficiency — never any content) to help improve it. Turn it off with `TOKENBURN_ANALYTICS=off`.
 - A small cache (`.cache.json`) and a per-install action token (`.fixtoken`) live in
   `~/.token-burn-tracker` (or next to `tracker.py` for the app build) — never published.
 

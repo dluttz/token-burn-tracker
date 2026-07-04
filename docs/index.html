@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Token Burn Tracker — see where your AI tokens go, privately</title>
-<meta name="description" content="A 100% local dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live on your own Mac. Your prompts and token data stay on your Mac.">
+<meta name="description" content="A local-first dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live on your own Mac. Your prompts and chats never leave your Mac.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Token Burn Tracker — see where your AI tokens go">
-<meta property="og:description" content="A 100% local dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, Codex. Live, on your own Mac. Your prompts and token data stay on your Mac.">
+<meta property="og:description" content="A local-first dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, Codex. Live, on your own Mac. Your prompts and chats never leave your Mac.">
 <meta property="og:image" content="https://dluttz.github.io/token-burn-tracker/og.png">
 <meta property="og:url" content="https://dluttz.github.io/token-burn-tracker/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Token Burn Tracker — see where your AI tokens go">
-<meta name="twitter:description" content="A 100% local dashboard for your AI coding token usage. macOS, open source, your prompts stay on your Mac.">
+<meta name="twitter:description" content="A local-first dashboard for your AI coding token usage. macOS, open source, your prompts stay on your Mac.">
 <meta name="twitter:image" content="https://dluttz.github.io/token-burn-tracker/og.png">
 <link rel="canonical" href="https://dluttz.github.io/token-burn-tracker/">
 <meta name="robots" content="index, follow">
@@ -24,7 +24,7 @@
   "name": "Token Burn Tracker",
   "operatingSystem": "macOS",
   "applicationCategory": "DeveloperApplication",
-  "description": "A 100% local macOS dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex. Live, private, and open source. Your prompts and token data stay on your Mac.",
+  "description": "A local-first macOS dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex. Live, private, and open source. Your prompts and chats never leave your Mac.",
   "url": "https://dluttz.github.io/token-burn-tracker/",
   "downloadUrl": "https://dluttz.github.io/token-burn-tracker/token-burn-tracker.zip",
   "softwareVersion": "1.0.0",
@@ -167,9 +167,9 @@
 
 <header class="hero">
   <div class="wrap">
-    <span class="badge"><span class="dot"></span> 100% local · your prompts stay on your Mac</span>
+    <span class="badge"><span class="dot"></span> local-first · your prompts stay on your Mac</span>
     <h1>See where your AI tokens actually go.</h1>
-    <p class="sub">A private dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live, on your own machine. No account and no cloud — your prompts and token data stay on your Mac.</p>
+    <p class="sub">A private dashboard for the tokens your AI coding tools burn — Claude Code, Cowork, and Codex — live, on your own machine. No account, no sign-in — your prompts and chats never leave your Mac.</p>
     <div class="cta">
       <a class="btn primary" href="#run">↓ Run it free</a>
       <a class="btn" href="https://github.com/dluttz/token-burn-tracker">View source on GitHub</a>
@@ -210,11 +210,11 @@
 <section id="run">
   <div class="wrap">
     <h2>Run it in one command</h2>
-    <p class="lead">No app to get blocked, no developer fees — it runs from your Terminal and stays 100% on your Mac. You just need Python 3, which most Macs already have.</p>
+    <p class="lead">No app to get blocked, no developer fees — it runs from your Terminal and keeps your prompts and chats on your Mac. You just need Python 3, which most Macs already have.</p>
     <div class="cmd"><code id="installcmd">curl -fsSL https://dluttz.github.io/token-burn-tracker/install.sh | bash</code><button onclick="navigator.clipboard.writeText(document.getElementById('installcmd').textContent);this.textContent='Copied';setTimeout(()=>this.textContent='Copy',1500)">Copy</button></div>
     <div class="steps">
       <div class="step"><h3>Paste &amp; run</h3><p>Open <b>Terminal</b> (press ⌘-Space, type "Terminal"), paste the command above, and press Return.</p></div>
-      <div class="step"><h3>Dashboard opens</h3><p>It downloads the files, starts the local server, and opens <code>localhost:8799</code> in your browser. Your prompts and token data stay on your Mac.</p></div>
+      <div class="step"><h3>Dashboard opens</h3><p>It downloads the files, starts the local server, and opens <code>localhost:8799</code> in your browser. Your prompts and chats never leave your Mac.</p></div>
       <div class="step"><h3>Desktop widget</h3><p>If you have the free <a href="https://tracesof.net/uebersicht">Übersicht</a> app, the widget is added automatically. No Übersicht yet? Install it and run the command again.</p></div>
     </div>
     <p class="lead" style="margin-top:18px; font-size:14px">Cautious about piped scripts? <a href="install.sh" style="color:var(--accent);font-weight:600">Read it first</a>. Prefer a clickable app? <a href="token-burn-tracker.zip" style="color:var(--accent);font-weight:600">Download the app</a> — on first open use <b>System Settings → Privacy &amp; Security → Open Anyway</b>.</p>

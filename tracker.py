@@ -33,9 +33,10 @@ except Exception:
     DATA_DIR = HERE
 
 # ---------- anonymous, opt-out usage analytics (never sends content) ----------
-# One small launch event (install id, app + macOS version, which integrations exist)
-# so improvements can be prioritized. Never sends prompts, titles, or token amounts.
-# Turn it off with:  TOKENBURN_ANALYTICS=off
+# Sends anonymous, aggregate usage: app + macOS version, which tools are used, token TOTALS
+# by tool/model, the input/cache/output efficiency split, and activity counts — so usage can be
+# understood (and, for orgs, reported in aggregate). Never sends prompts, chat titles, project
+# names, or file paths. Keyed by a random install id, not identity. Turn it off: TOKENBURN_ANALYTICS=off
 PH_KEY = "phc_sfV8RXR5sqqRboLPP8Px75FDBPzoGmgHZqrKrT8nEfZv"
 PH_HOST = os.environ.get("TOKENBURN_PH_HOST", "https://us.i.posthog.com")
 ANALYTICS_ON = os.environ.get("TOKENBURN_ANALYTICS", "on").lower() not in ("off", "0", "false", "no")
@@ -46,12 +47,25 @@ def _install_id():
         iid = secrets.token_hex(16); open(p, "w").write(iid); return iid
     except Exception:
         return "unknown"
+def _is_internal():
+    """True on the developer's own machines/runs so their usage can be excluded from real-user metrics.
+    Mark a machine with:  touch ~/.tokenburn_internal   (or set env TOKENBURN_INTERNAL=1)."""
+    if os.environ.get("TOKENBURN_INTERNAL", "").strip().lower() in ("1", "true", "yes", "on"):
+        return True
+    for p in (os.path.expanduser("~/.tokenburn_internal"), os.path.join(DATA_DIR, ".internal")):
+        try:
+            if os.path.exists(p):
+                return True
+        except Exception:
+            pass
+    return False
 def analytics_event(event, props=None):
     if not (ANALYTICS_ON and PH_KEY): return
     def _send():
         try:
+            p = dict(props or {}); p.setdefault("internal", _is_internal())   # tag dev/self runs so they can be filtered out
             body = json.dumps({"api_key": PH_KEY, "event": event,
-                               "distinct_id": _install_id(), "properties": dict(props or {})}).encode()
+                               "distinct_id": _install_id(), "properties": p}).encode()
             req = urllib.request.Request(PH_HOST.rstrip("/") + "/capture/", data=body,
                                          headers={"Content-Type": "application/json"})
             urllib.request.urlopen(req, timeout=4).read()
@@ -70,6 +84,38 @@ def analytics_launch():
             "uses_cowork": os.path.isdir(HOME + "/Library/Application Support/Claude/local-agent-mode-sessions"),
             "uses_codex": os.path.isdir(HOME + "/.codex/sessions"),
             "widget_installed": os.path.isdir(HOME + "/Library/Application Support/Übersicht/widgets/token-burn.widget"),
+        })
+    except Exception:
+        pass
+
+_USAGE_SENT = False
+def analytics_usage(d):
+    """Anonymous, content-free usage snapshot: token totals, tool/model mix, efficiency split, and
+    activity counts. NEVER includes chat titles, prompts, project names, or file paths. Once per launch."""
+    global _USAGE_SENT
+    if _USAGE_SENT or not ANALYTICS_ON or not isinstance(d, dict):
+        return
+    _USAGE_SENT = True
+    try:
+        tb = d.get("tokenBreakdown") or {}
+        tot = sum(int(v or 0) for v in tb.values()) or 1
+        cutoff = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+        active = sum(1 for x in (d.get("days") or []) if x.get("date", "") >= cutoff and (x.get("total") or 0) > 0)
+        sessions = d.get("bySession") or []
+        heavy = sum(1 for s in sessions if len(s) > 3 and (s[3] or 0) >= 1000000)   # count only, no titles
+        byTool = d.get("byTool") or {}
+        models = [m[0] for m in (d.get("byModel") or [])[:5] if isinstance(m, (list, tuple)) and m]   # model names only
+        analytics_event("app_usage", {
+            "app_version": local_version(), "macos": (platform.mac_ver()[0] or "?"), "$os": "Mac OS X",
+            "grand_total": int(d.get("grand") or 0), "today_total": int(d.get("today") or 0), "week_total": int(d.get("week") or 0),
+            "tok_input": int(tb.get("input") or 0), "tok_cache_read": int(tb.get("cache_read") or 0),
+            "tok_cache_write": int(tb.get("cache_write") or 0), "tok_output": int(tb.get("output") or 0),
+            "cache_read_pct": round(100.0 * int(tb.get("cache_read") or 0) / tot, 1),
+            "tokens_claude_code": int(byTool.get("Claude Code") or 0),
+            "tokens_cowork": int(byTool.get("Cowork") or 0),
+            "tokens_codex": int(byTool.get("Codex") or 0),
+            "active_days_30": active, "session_count": len(sessions), "heavy_chat_count": heavy,
+            "top_models": models,
         })
     except Exception:
         pass
@@ -642,6 +688,7 @@ def build():
             d["insights"] = {"suggestions": [], "waste": []}
         STATE["data"] = d
         STATE["loading"] = False
+        analytics_usage(d)   # anonymous, content-free usage snapshot, once per launch
     except Exception as e:
         STATE["error"] = str(e) + "\n" + traceback.format_exc()
         STATE["loading"] = False

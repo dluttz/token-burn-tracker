@@ -28,6 +28,13 @@ for _pid in $(/usr/sbin/lsof -ti tcp:"$PORT" 2>/dev/null); do
 done
 echo "- Server stopped."
 
+# Remove the login item (LaunchAgent) so it no longer auto-starts on login
+PLIST="$HOME/Library/LaunchAgents/com.dluttz.tokenburn.plist"
+if [ -f "$PLIST" ]; then
+  launchctl unload "$PLIST" 2>/dev/null || true
+  rm -f "$PLIST" && echo "- Login item removed (won't auto-start anymore)."
+fi
+
 # Remove the Übersicht widget (move to Trash)
 WID="$HOME/Library/Application Support/Übersicht/widgets/token-burn.widget"
 if [ -d "$WID" ]; then

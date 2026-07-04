@@ -30,9 +30,31 @@ curl -fsSL "$RAW/tracker.py"       -o "$DIR/tracker.py"
 curl -fsSL "$RAW/tracker.html"     -o "$DIR/tracker.html"
 curl -fsSL "$RAW/widget/index.jsx" -o "$DIR/widget/index.jsx"
 
-# --- (re)start the local server ---
+# --- install a login item (LaunchAgent) so it auto-starts and stays running — set-and-forget ---
+LABEL="com.dluttz.tokenburn"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+mkdir -p "$HOME/Library/LaunchAgents"
+launchctl unload "$PLIST" 2>/dev/null || true      # stop any previous copy first
 pkill -f "$DIR/tracker.py" 2>/dev/null || true
-( cd "$DIR" && TOKENBURN_DATA_DIR="$DIR" nohup "$PY" tracker.py >"$DIR/server.log" 2>&1 & )
+cat > "$PLIST" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>$PY</string><string>$DIR/tracker.py</string></array>
+  <key>WorkingDirectory</key><string>$DIR</string>
+  <key>EnvironmentVariables</key><dict><key>TOKENBURN_DATA_DIR</key><string>$DIR</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>$DIR/server.log</string>
+  <key>StandardErrorPath</key><string>$DIR/server.log</string>
+</dict>
+</plist>
+PLIST_EOF
+launchctl load "$PLIST" 2>/dev/null || true        # starts it now AND on every login
 
 # --- wait until it answers, then open the dashboard ---
 for i in $(seq 1 60); do
@@ -54,13 +76,15 @@ else
   echo "then run this command again to add the widget to your desktop."
 fi
 
-say "Done — your dashboard is open at http://localhost:$PORT"
+say "Done — it's running at http://localhost:$PORT and will start automatically every time you log in."
 cat <<EOF
 
-  Keep this handy:
-    Restart:   ( cd ~/.token-burn-tracker && python3 tracker.py & ) ; open http://localhost:$PORT
-    Stop:      pkill -f tracker.py
-    Uninstall: pkill -f tracker.py ; rm -rf ~/.token-burn-tracker
-                 (and delete the 'token-burn' widget from Übersicht's widgets folder)
+  It now runs in the background and relaunches on login — nothing to reopen.
+  Handy commands:
+    Open dashboard: open http://localhost:$PORT
+    Stop for now:   launchctl unload ~/Library/LaunchAgents/com.dluttz.tokenburn.plist
+    Start again:    launchctl load ~/Library/LaunchAgents/com.dluttz.tokenburn.plist
+    Uninstall:      launchctl unload ~/Library/LaunchAgents/com.dluttz.tokenburn.plist ; rm -f ~/Library/LaunchAgents/com.dluttz.tokenburn.plist ; rm -rf ~/.token-burn-tracker
+                      (then delete the 'token-burn' widget from Übersicht's widgets folder)
 
 EOF
