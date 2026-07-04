@@ -248,7 +248,7 @@ def analytics_error(where, err):
         pass
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 8   # bumped: real chat titles now read per tool (Cowork metadata, Codex SQLite, Claude Code summary, custom title field)
+CACHE_VERSION = 9   # bumped: heavy-chat titles now resolve from ANY of a chat's transcript files (real sidebar title, not the opening line)
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -751,6 +751,7 @@ def aggregate(entries, titles):
     sess = defaultdict(int)
     sess_meta = {}
     sess_file = {}   # session key -> first source .jsonl path seen for it (for transcript links)
+    sess_paths = defaultdict(set)   # session key -> ALL transcript files, so the real title resolves even if the first file misses
     sess_date = {}   # session key -> latest activity date (to find the chat in the app's date-grouped list)
     grand = 0
     for date, tl, md, cwd, tk, sk, fpath in entries:
@@ -771,6 +772,7 @@ def aggregate(entries, titles):
             sess_meta[sk] = (tl, sp)
         if fpath:
             sess_file.setdefault(sk, fpath)
+            sess_paths[sk].add(fpath)
         if date != "unknown" and date > sess_date.get(sk, ""):
             sess_date[sk] = date
         grand += tk
@@ -789,6 +791,12 @@ def aggregate(entries, titles):
         tl, sp = sess_meta.get(sk, ("?", "?"))
         fp = sess_file.get(sk, "")
         meta = agent_meta_for(fp)   # real sidebar title + start time from the app's own per-chat metadata (Cowork)
+        if not (meta and meta.get("title")):   # a chat can span several transcript files — scan them all for the real title
+            for cand in sess_paths.get(sk, ()):
+                m = agent_meta_for(cand)
+                if m and m.get("title"):
+                    meta = m
+                    break
         title = (meta and meta.get("title")) or titles.get(sk) or sp or "(session)"
         when = ""
         if meta and meta.get("created"):   # authoritative chat-start time (epoch ms) — stable, never bumps on reopen
