@@ -135,6 +135,72 @@ def force_check_update():
     outdated = bool(latest) and _version_newer(latest, cur)
     return {"current": cur, "latest": latest, "outdated": outdated, "cmd": UPDATE_INSTALL_CMD}
 
+# ---------- one-click self-update (download newest files, verify they compile, restart) ----------
+UPDATE_RAW = "https://raw.githubusercontent.com/dluttz/token-burn-tracker/main"
+def apply_update():
+    """Download the newest app files into HERE and swap them in. tracker.py is only replaced after
+    it passes a py_compile check, so a bad release can never brick the install. Returns (ok, message)."""
+    import py_compile
+    if not os.access(HERE, os.W_OK):
+        return False, "This copy is in a read-only location; re-run the installer to update."
+    staged = {}
+    for rel in ("tracker.py", "tracker.html", "VERSION", "widget/index.jsx"):
+        try:
+            req = urllib.request.Request(UPDATE_RAW + "/" + rel, headers={"User-Agent": "token-burn-tracker"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                staged[rel] = r.read()
+        except Exception as e:
+            if rel == "widget/index.jsx":
+                continue   # widget file is optional
+            return False, "Couldn't download %s (%s)" % (rel, str(e)[:120])
+    if not staged.get("tracker.py", b"").strip():
+        return False, "Update download was empty; nothing changed."
+    newpy = os.path.join(HERE, "tracker.py.new")
+    try:
+        with open(newpy, "wb") as f:
+            f.write(staged["tracker.py"])
+        py_compile.compile(newpy, doraise=True)   # verify BEFORE replacing anything
+    except Exception as e:
+        try: os.remove(newpy)
+        except Exception: pass
+        return False, "New version failed a safety check and was not applied (%s)." % (str(e)[:120])
+    try:
+        for rel, data in staged.items():
+            dest = os.path.join(HERE, *rel.split("/"))
+            dd = os.path.dirname(dest)
+            if dd and not os.path.isdir(dd):
+                os.makedirs(dd, exist_ok=True)
+            with open(dest, "wb") as f:
+                f.write(data)
+        try: os.remove(newpy)
+        except Exception: pass
+    except Exception as e:
+        return False, "Couldn't write the update (%s)." % (str(e)[:120])
+    return True, local_version()
+
+def restart_self():
+    """Relaunch so freshly-downloaded code takes effect. A detached helper waits for this process
+    to exit (freeing the port), then starts a fresh tracker.py. Never touches the user's terminal."""
+    ppid = os.getpid()
+    here_q = HERE.replace('"', '\\"'); data_q = DATA_DIR.replace('"', '\\"')
+    script = ('sleep 1.2; kill %d 2>/dev/null; sleep 0.8; '
+              'cd "%s" && TOKENBURN_DATA_DIR="%s" nohup python3 tracker.py > server.log 2>&1 &') % (ppid, here_q, data_q)
+    try:
+        subprocess.Popen(["/bin/bash", "-lc", script], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+def analytics_error(where, err):
+    """Anonymous error report (never any chat content) so issues can be seen and fixed."""
+    try:
+        analytics_event("app_error", {"where": str(where)[:60],
+                        "error": (type(err).__name__ + ": " + str(err))[:200],
+                        "app_version": local_version(), "macos": (platform.mac_ver()[0] or "?"), "$os": "Mac OS X"})
+    except Exception:
+        pass
+
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
 CACHE_VERSION = 8   # bumped: real chat titles now read per tool (Cowork metadata, Codex SQLite, Claude Code summary, custom title field)
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
@@ -579,6 +645,7 @@ def build():
     except Exception as e:
         STATE["error"] = str(e) + "\n" + traceback.format_exc()
         STATE["loading"] = False
+        analytics_error("build", e)   # anonymous: error type + version only, never chat content
     finally:
         try: BUILD_LOCK.release()
         except Exception: pass
@@ -1792,7 +1859,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False})); return
             ok = save_theme(body.get("primary"), body.get("accent"))
             self._send(200 if ok else 400, json.dumps(dict({"ok": ok}, **load_theme()))); return
-        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source")
+        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate")
         if not any(self.path.startswith(x) for x in POSTS):
             self._send(404, json.dumps({"error": "not found"})); return
         # Security: local origin only + per-launch secret that only our served page knows.
@@ -1805,6 +1872,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(400, json.dumps({"ok": False, "error": "bad request"})); return
         if body.get("token") != FIX_TOKEN:
             self._send(403, json.dumps({"ok": False, "error": "invalid token"})); return
+        if self.path.startswith("/api/applyupdate"):
+            ok, msg = apply_update()
+            self._send(200, json.dumps({"ok": ok, "message": msg}))
+            if ok:
+                restart_self()   # detached relaunch; this process exits ~1s after the response is sent
+            return
         if self.path.startswith("/api/kill_leftovers"):
             res = kill_leftovers(); _LIVE_CACHE.clear()
             self._send(200, json.dumps(res)); return

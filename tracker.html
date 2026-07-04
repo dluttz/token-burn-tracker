@@ -415,6 +415,11 @@
   .um-steps span{background:var(--bg);border:1px solid var(--rule);border-radius:8px;padding:5px 9px}
   .um-foot{display:flex;justify-content:center;margin-top:16px}
   .um-later{border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:6px 10px}
+  .um-manual{margin:2px 0}
+  .um-manual>summary{cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600;list-style:none;padding:8px 0;text-align:center}
+  .um-manual>summary::-webkit-details-marker{display:none}
+  .um-manual[open]>summary{margin-bottom:12px}
+  .um-copybtn-alt{background:transparent;color:var(--accent);border:1px solid var(--rule);box-shadow:none;font-size:13.5px;padding:11px 14px}
   .um-later:hover{color:var(--ink);text-decoration:underline}
   html[data-theme="soft"] .um-card{box-shadow:var(--shadow)}
   html[data-theme="soft"] .um-cmdbox{box-shadow:var(--shadow-sm)}
@@ -532,11 +537,16 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
       <h2>Update available</h2>
     </div>
     <p class="um-vers" id="um-versline">You're on v<b id="um-current">—</b> — v<b id="um-latest">—</b> is now available.</p>
-    <p class="um-sub">What's new gets better every release.</p>
-    <div class="um-cmdbox"><code id="um-cmd"></code></div>
-    <button class="um-copybtn" id="um-copy">Copy update command</button>
-    <p class="um-copysub" id="um-copysub">Copies the install command to your clipboard.</p>
-    <div class="um-steps"><span>1) Open Terminal</span><span>2) Paste (⌘V)</span><span>3) Press Return</span></div>
+    <p class="um-sub">Updates in place and keeps all your settings — no Terminal needed.</p>
+    <button class="um-copybtn" id="um-now">Update now</button>
+    <p class="um-copysub" id="um-status">Downloads the latest version and restarts automatically.</p>
+    <details class="um-manual" id="um-manual">
+      <summary>Prefer to update manually?</summary>
+      <div class="um-cmdbox"><code id="um-cmd"></code></div>
+      <button class="um-copybtn um-copybtn-alt" id="um-copy">Copy update command</button>
+      <p class="um-copysub" id="um-copysub">Copies the install command to your clipboard.</p>
+      <div class="um-steps"><span>1) Open Terminal</span><span>2) Paste (⌘V)</span><span>3) Press Return</span></div>
+    </details>
     <div class="um-foot"><button class="um-later" id="um-later">Later</button></div>
   </div>
 </div>
@@ -756,6 +766,34 @@ function showUpdateModal(u){
   ov.classList.remove("hidden");
 }
 function hideUpdateModal(){ const ov=$("#update-modal"); if(ov) ov.classList.add("hidden"); }
+// One-click update: ask the server to download the newest version, verify it, and restart itself;
+// then wait for it to come back and reload. No Terminal. Falls back to the manual command on error.
+async function doSelfUpdate(){
+  const btn=$("#um-now"), st=$("#um-status");
+  if(btn){ btn.disabled=true; btn.textContent="Updating…"; }
+  if(st) st.textContent="Downloading the latest version…";
+  let r=null;
+  try{
+    r = await fetch("/api/applyupdate",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:FIX_TOKEN})}).then(x=>x.json());
+  }catch(e){ r=null; }
+  if(!r || !r.ok){
+    if(btn){ btn.disabled=false; btn.textContent="Update now"; }
+    if(st) st.textContent=((r&&r.message)?r.message:"Couldn't update automatically.")+" You can update manually below.";
+    const man=$("#um-manual"); if(man) man.open=true;
+    return;
+  }
+  if(st) st.textContent="Installing and restarting…";
+  await new Promise(res=>setTimeout(res,3200));   // let the old server exit and the new one boot
+  let tries=0;
+  const poll=setInterval(async ()=>{
+    tries++;
+    let up=false;
+    try{ up=(await fetch("/api/summary",{cache:"no-store"})).ok; }catch(e){}
+    if(up){ clearInterval(poll); if(st) st.textContent="Updated ✓ — reloading…"; setTimeout(()=>location.reload(),700); }
+    else if(tries>40){ clearInterval(poll); if(st) st.textContent="Updated — please refresh the page (⌘R)."; }
+  },1000);
+}
 (function(){
   const ov=$("#update-modal"); if(!ov) return;
   const copyBtn=$("#um-copy"), copySub=$("#um-copysub"), laterBtn=$("#um-later");
@@ -770,6 +808,7 @@ function hideUpdateModal(){ const ov=$("#update-modal"); if(ov) ov.classList.add
       if(copySub) copySub.textContent="Select the command above and copy it manually.";
     }
   });
+  const nowBtn=$("#um-now"); if(nowBtn) nowBtn.addEventListener("click", doSelfUpdate);
   if(laterBtn) laterBtn.addEventListener("click", hideUpdateModal);
   ov.addEventListener("click", e=>{ if(e.target===ov) hideUpdateModal(); });
   document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !ov.classList.contains("hidden")) hideUpdateModal(); });
