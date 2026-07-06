@@ -248,7 +248,7 @@ def analytics_error(where, err):
         pass
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 9   # bumped: heavy-chat titles now resolve from ANY of a chat's transcript files (real sidebar title, not the opening line)
+CACHE_VERSION = 10   # bumped: fallback titles are now sanitized at capture (no <system-reminder> fragments) — recapture them
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -300,6 +300,15 @@ def _ts_date(v):
         return None
 
 # ---------- parsers -> (entries[[date,tool,model,project,tokens,sessionKey,filePath]], titles{sk:title}) ----------
+def _clean_title(t):
+    """Sanitize first-prompt fallback titles: the desktop app can append tag blocks like
+    <system-reminder>… to the user's message, which must never show up as a chat title.
+    Drops those blocks (including ones cut off by the 160-char cap) and tidies whitespace."""
+    t = re.sub(r"(?is)<(system[-_ ]?reminder|uploaded_files|command-message)\b.*?(</\1>|$)", " ", t)
+    # partial known-noise tag cut off by the length cap (e.g. "…<syst"); bare '<' in prose is left alone
+    t = re.sub(r"(?is)\s*</?(syst|upload|command|antml)[^>]*$", "", t)
+    return " ".join(t.split())[:160].strip()
+
 def _empty_breakdown():
     return {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
 
@@ -336,7 +345,9 @@ def claude_entries(path, tool, file_date):
                 if msg.get("role") == "user":
                     t = user_text(msg)
                     if t:
-                        titles.setdefault(sk, " ".join(t.split())[:160])
+                        ct = _clean_title(t)
+                        if ct:   # don't let a tag-only message (e.g. a scheduled run) claim the title slot
+                            titles.setdefault(sk, ct)
                     continue
                 u = msg.get("usage")
                 if not isinstance(u, dict):
@@ -714,7 +725,7 @@ def load_agent_meta():
     idx = {}
     base = HOME + "/Library/Application Support/Claude/local-agent-mode-sessions"
     for mp in glob.glob(base + "/**/local_*.json", recursive=True):
-        m = re.search(r"(local_[0-9a-f-]+)\.json$", mp)
+        m = re.search(r"(local_[0-9a-fA-F-]+)\.json$", mp)
         if not m:
             continue
         try:
@@ -736,8 +747,23 @@ def agent_meta():
         _AGENT_META["ts"] = now
     return _AGENT_META["idx"]
 def agent_meta_for(path):
-    m = re.search(r"(local_[0-9a-f-]+)", path or "")
+    m = re.search(r"(local_[0-9a-fA-F-]+)", path or "")
     return agent_meta().get(m.group(1)) if m else None
+
+def _fresh_session_titles(d):
+    """bySession is baked at scan time, but the app writes/renames chat titles asynchronously —
+    so a chat can get its real sidebar title AFTER we scanned it. Re-resolve from the live
+    metadata index at serve time (the same source the Agents view uses, which is why that view
+    was always right). Cheap: agent_meta() is cached ~8s and this touches ≤30 rows."""
+    try:
+        for row in (d or {}).get("bySession") or []:
+            if len(row) >= 5 and row[4]:
+                m = agent_meta_for(row[4])
+                if m and m.get("title"):
+                    row[0] = m["title"]
+    except Exception:
+        pass
+    return d
 
 def aggregate(entries, titles):
     day = defaultdict(lambda: defaultdict(int))
@@ -819,7 +845,7 @@ def aggregate(entries, titles):
             "byModel": byModel, "bySession": bySession, "projectPaths": proj_path}
 
 def summary():
-    d = STATE["data"] or {}
+    d = _fresh_session_titles(STATE["data"] or {})
     days = d.get("days", [])
     todaystr = datetime.date.today().isoformat()
     today_tool = next((x["byTool"] for x in days if x["date"] == todaystr), {})
@@ -2004,7 +2030,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             out = {"loading": STATE["loading"], "error": STATE["error"],
                    "files": STATE["files"], "parsed": STATE["parsed"]}
             if STATE["data"]:
-                out.update(STATE["data"])
+                out.update(_fresh_session_titles(STATE["data"]))
             try:
                 out["update"] = check_update()
             except Exception:
