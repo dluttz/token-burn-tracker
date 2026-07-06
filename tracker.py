@@ -10,7 +10,7 @@ Sources:
 Adds a "why" view: tokens grouped by SESSION, titled by the first user prompt
 (Claude Code / Cowork) or the Codex thread name. stdlib only; binds to 127.0.0.1.
 """
-import http.server, socketserver, json, os, re, glob, threading, datetime, traceback, subprocess, time, sqlite3, secrets, signal, platform, urllib.request
+import http.server, socketserver, json, os, re, glob, threading, datetime, traceback, subprocess, time, sqlite3, secrets, signal, platform, urllib.request, urllib.parse, tempfile
 from collections import defaultdict, deque
 
 SESS_RE = re.compile(r'local_[0-9a-fA-F-]{6,}')
@@ -1820,11 +1820,124 @@ def save_theme(primary=None, accent=None):
     except Exception:
         return False
 
+# ---------- Übersicht desktop widget (one-click install from the dashboard) ----------
+# One button does everything: if the free Übersicht app is missing it is downloaded and
+# installed first, then the widget is written with __TRACKER_DIR__ resolved and Übersicht opened.
+UBERSICHT_URL = "https://tracesof.net/uebersicht/"
+UBERSICHT_ZIP_FALLBACK = "https://tracesof.net/uebersicht/releases/Uebersicht-1.6.82.app.zip"   # last known good
+WIDGET_SRC = os.path.join(HERE, "widget", "index.jsx")
+WIDGET_DEST_DIR = os.path.join(HOME, "Library", "Application Support", "Übersicht", "widgets", "token-burn.widget")
+
+def ubersicht_app():
+    """Path of an installed Übersicht.app, or None. Scans the usual spots by name so
+    umlaut-less renames (Uebersicht.app) are found too."""
+    for parent in ("/Applications", os.path.join(HOME, "Applications")):
+        try:
+            for n in sorted(os.listdir(parent)):
+                if n.endswith(".app") and "bersicht" in n and os.path.isdir(os.path.join(parent, n)):
+                    return os.path.join(parent, n)
+        except Exception:
+            continue
+    return None
+
+def _ubersicht_download_url():
+    """Current app zip URL scraped from the Übersicht homepage (version is in the filename);
+    falls back to the last known release if the page can't be read."""
+    try:
+        req = urllib.request.Request(UBERSICHT_URL, headers={"User-Agent": "TokenBurnTracker"})
+        html = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", "replace")
+        m = re.search(r'href="([^"]*releases/Uebersicht-[\d.]+\.app\.zip)"', html)
+        if m:
+            return urllib.parse.urljoin(UBERSICHT_URL, m.group(1))
+    except Exception:
+        pass
+    return UBERSICHT_ZIP_FALLBACK
+
+def install_ubersicht():
+    """Download + install the free Übersicht app (GPL, tracesof.net). Returns the .app path or None.
+    Prefers /Applications when writable, else ~/Applications. ditto keeps the code signature intact."""
+    tmpdir = tempfile.mkdtemp(prefix="tokenburn-uber-")
+    zpath = os.path.join(tmpdir, "uebersicht.zip")
+    try:
+        req = urllib.request.Request(_ubersicht_download_url(), headers={"User-Agent": "TokenBurnTracker"})
+        with urllib.request.urlopen(req, timeout=120) as r, open(zpath, "wb") as f:
+            while True:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+        extract = os.path.join(tmpdir, "x")
+        os.makedirs(extract, exist_ok=True)
+        for cmd in (["ditto", "-xk", zpath, extract], ["unzip", "-oq", zpath, "-d", extract]):
+            try:
+                if subprocess.run(cmd, capture_output=True, timeout=180).returncode == 0:
+                    break
+            except Exception:
+                continue
+        app_src = next((os.path.join(extract, n) for n in sorted(os.listdir(extract))
+                        if n.endswith(".app") and "bersicht" in n), None)   # umlaut-safe match
+        if not app_src:
+            return None
+        dest_parent = "/Applications" if os.access("/Applications", os.W_OK) else os.path.join(HOME, "Applications")
+        os.makedirs(dest_parent, exist_ok=True)
+        if subprocess.run(["mv", "-f", app_src, dest_parent + "/"], capture_output=True, timeout=60).returncode != 0:
+            return None
+        return ubersicht_app()
+    except Exception as e:
+        analytics_error("install_ubersicht", e)
+        return None
+    finally:
+        subprocess.run(["rm", "-rf", tmpdir], capture_output=True)
+
+def widget_source():
+    """Widget code with __TRACKER_DIR__ resolved to this install (mirrors install.sh's sed)."""
+    with open(WIDGET_SRC, "r", encoding="utf-8") as f:
+        return f.read().replace("__TRACKER_DIR__", DATA_DIR)
+
+def widget_status():
+    """Everything the dashboard control needs to pick its state."""
+    return {"ubersichtInstalled": bool(ubersicht_app()),
+            "widgetInstalled": os.path.isfile(os.path.join(WIDGET_DEST_DIR, "index.jsx")),
+            "widgetSourceOk": os.path.isfile(WIDGET_SRC),
+            "ubersichtUrl": UBERSICHT_URL}
+
+def install_widget():
+    """The whole one-click flow: get Übersicht if needed, write the filled-in widget, open the app.
+    Also serves as 'refresh' after a self-update (self-update only refreshes the source file)."""
+    st = widget_status()
+    if not st["widgetSourceOk"]:
+        return dict({"ok": False, "error": "widget/index.jsx is missing — re-run the one-line installer"}, **st)
+    app = ubersicht_app()
+    auto_installed = False
+    if not app:
+        app = install_ubersicht()
+        auto_installed = bool(app)
+        if not app:
+            return dict({"ok": False, "error": "couldn't download Übersicht — use the links below"}, **widget_status())
+    try:
+        code = widget_source()
+        os.makedirs(WIDGET_DEST_DIR, exist_ok=True)
+        with open(os.path.join(WIDGET_DEST_DIR, "index.jsx"), "w", encoding="utf-8") as f:
+            f.write(code)
+        try:
+            subprocess.Popen(["open", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass   # widget is installed either way; Übersicht picks it up on next launch
+        analytics_event("widget_installed", {"app_version": local_version(),
+                        "macos": (platform.mac_ver()[0] or "?"), "$os": "Mac OS X",
+                        "ubersicht_autoinstalled": auto_installed})   # anonymous + content-free, like all events
+        return dict({"ok": True, "ubersichtAutoInstalled": auto_installed}, **widget_status())
+    except Exception as e:
+        analytics_error("install_widget", e)
+        return dict({"ok": False, "error": (type(e).__name__ + ": " + str(e))[:200]}, **widget_status())
+
 class Handler(http.server.BaseHTTPRequestHandler):
-    def _send(self, code, body, ct="application/json", cors=False):
+    def _send(self, code, body, ct="application/json", cors=False, extra=None):
         b = body if isinstance(body, (bytes, bytearray)) else body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ct)
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
         # Local-only + same-origin for the dashboard; no CORS in general, so other websites can't
         # read your data or the action token. EXCEPTION: the /api/theme color endpoint is CORS-open
         # (cors=True) so the desktop widget can sync one accent color (a harmless string).
@@ -1861,6 +1974,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps(live_data()))
         elif self.path.startswith("/api/theme"):
             self._send(200, json.dumps(load_theme()))
+        elif self.path.startswith("/api/widget"):
+            self._send(200, json.dumps(widget_status()))
+        elif self.path.startswith("/widget.jsx"):
+            # Plain-download fallback (no Übersicht detected, or user prefers manual):
+            # a ready-to-use single-file widget — drop it into Übersicht's widgets folder.
+            try:
+                self._send(200, widget_source(), "application/javascript; charset=utf-8",
+                           extra={"Content-Disposition": 'attachment; filename="token-burn.jsx"'})
+            except Exception:
+                self._send(404, json.dumps({"error": "widget source missing"}))
         elif self.path.startswith("/api/leftovers"):
             self._send(200, json.dumps({"leftovers": find_leftovers()}))
         elif self.path.startswith("/api/agents"):
@@ -1914,7 +2037,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False})); return
             ok = save_theme(body.get("primary"), body.get("accent"))
             self._send(200 if ok else 400, json.dumps(dict({"ok": ok}, **load_theme()))); return
-        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate")
+        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget")
         if not any(self.path.startswith(x) for x in POSTS):
             self._send(404, json.dumps({"error": "not found"})); return
         # Security: local origin only + per-launch secret that only our served page knows.
@@ -1933,6 +2056,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if ok:
                 restart_self()   # detached relaunch; this process exits ~1s after the response is sent
             return
+        if self.path.startswith("/api/install_widget"):
+            self._send(200, json.dumps(install_widget())); return
         if self.path.startswith("/api/kill_leftovers"):
             res = kill_leftovers(); _LIVE_CACHE.clear()
             self._send(200, json.dumps(res)); return

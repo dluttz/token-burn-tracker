@@ -41,9 +41,16 @@
   .accentpick .asw,.accentpick .psw{width:17px;height:17px;border-radius:50%;border:1px solid rgba(0,0,0,.18);cursor:pointer;padding:0}
   .accentpick .asw.on,.accentpick .psw.on{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ink)}
   .accentpick input[type=color]{width:19px;height:19px;padding:0;border:1px solid rgba(0,0,0,.18);border-radius:50%;background:none;cursor:pointer}
-  .customizebtn{display:flex;align-items:center;gap:10px;margin:8px 0 0;padding:8px 12px;border-radius:9px;border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:500;cursor:pointer;text-align:left}
+  .customizebtn{display:flex;align-items:center;gap:10px;margin:8px 0 0;padding:8px 12px;border-radius:9px;border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:500;cursor:pointer;text-align:left;width:100%}
   .customizebtn svg{width:16px;height:16px;opacity:.8;flex:none}
   .customizebtn:hover{background:var(--hover);color:var(--ink)}
+  .widgetbtn{display:flex;align-items:center;justify-content:center;gap:8px;width:calc(100% - 12px);margin:10px 6px 0;padding:9px 12px;border:none;border-radius:9px;background:var(--accent);color:#fff;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-align:center}
+  .widgetbtn svg{width:16px;height:16px;flex:none}
+  .widgetbtn[disabled]{opacity:.6;cursor:default}
+  .widgetbtn.done{filter:brightness(1.05)}
+  .widgetnote{margin:6px 6px 0;padding:9px 11px;font-size:11px;line-height:1.55;color:var(--muted);background:rgba(var(--accent-rgb),.05);border:1px solid rgba(var(--accent-rgb),.18);border-radius:9px}
+  .widgetnote a{color:var(--accent);font-weight:600;text-decoration:none}
+  .widgetnote a:hover{text-decoration:underline}
 
   /* ============ layout / header ============ */
   .wrap{max-width:1180px;margin:0 0 0 217px;padding:28px 44px 90px}
@@ -214,7 +221,7 @@
   .sug .rank{flex:none;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
   .sug .tag{display:inline-block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:2px}
   .revealbtn{margin-top:10px;font:inherit;font-size:12px;font-weight:600;border:1px solid rgba(var(--accent-rgb),.25);background:transparent;color:var(--accent);padding:5px 12px;border-radius:8px;cursor:pointer}
-  .revealbtn:hover{background:rgba(var(--accent-rgb),.06)}
+  .revealbtn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
   .revealbtn.open{background:var(--accent);color:#fff;border-color:var(--accent)}
   .revealbox{margin-top:10px;background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.55;color:var(--muted)}
   .revealbox div{margin:5px 0}
@@ -240,7 +247,7 @@
   .fixchat-t{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:60px;flex:1 1 auto}
   .fixchat-d{color:var(--muted);font-size:12px;flex:none;font-weight:600}
   .fixfind{font:inherit;font-size:11.5px;font-weight:600;border:1px solid var(--rule);background:transparent;color:var(--accent);padding:3px 10px;border-radius:7px;cursor:pointer;flex:none;white-space:nowrap}
-  .fixfind:hover{background:rgba(var(--accent-rgb),.07)}
+  .fixfind:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
   .fixfind.ok{color:#2e7d32;border-color:#2e7d32}
   .fixcmd{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
   .fixcmd-label{color:var(--muted);font-size:12.5px}
@@ -261,8 +268,12 @@
   .wrow .wh{font-size:12.5px;margin:8px 0 0;line-height:1.5}
   .fixbar{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
   .fixbtn{font:inherit;font-size:12.5px;font-weight:600;border:none;background:var(--accent);color:#fff;padding:8px 15px;border-radius:9px;cursor:pointer}
-  .fixbtn:hover{filter:brightness(1.08)}
   .fixbtn:disabled{opacity:.6;cursor:default}
+  /* hover affordance: solid accent buttons invert (bg ↔ accent) so it's obvious they're clickable */
+  .fixbtn,.widgetbtn,.emptybanner .eb-btn,.um-copybtn,.revealbtn,.fixfind,.srow .srm,.btn,.liconbtn{transition:background .13s,color .13s,box-shadow .13s,border-color .13s,filter .13s}
+  .fixbtn:hover:not(:disabled),.widgetbtn:hover:not(:disabled),.emptybanner .eb-btn:hover:not(:disabled),.um-copybtn:hover:not(:disabled){background:var(--bg);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+  .um-copybtn.copied:hover{background:#2c7a3f;color:#fff;box-shadow:none}
+  .um-copybtn-alt:hover:not(:disabled){background:var(--accent);color:#fff;box-shadow:none;border-color:var(--accent)}
   .fixstatus{font-size:12.5px}
   .fixstatus.ok{color:#2c7a3f}
   .fixstatus.err{color:#c0392b}
@@ -274,7 +285,7 @@
   .srow .snm{font-weight:600}
   .srow .smeta{color:var(--muted);font-size:12px;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
   .srow .srm{margin-left:12px;font:inherit;font-size:12px;border:1px solid var(--rule);background:transparent;border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--accent);flex:none}
-  .srow .srm:hover{border-color:rgba(var(--accent-rgb),.4)}
+  .srow .srm:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
   .addtool{margin-top:16px;border:1px solid var(--rule);border-radius:12px;padding:16px;background:var(--bg)}
   .addrow{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center;margin:8px 0}
   .addrow label{font-size:12.5px;color:var(--muted);font-weight:600}
@@ -293,7 +304,6 @@
   .emptybanner .eb-h{font-weight:650;font-size:14.5px;margin-bottom:2px}
   .emptybanner .eb-p{color:var(--muted);font-size:13px;line-height:1.5}
   .emptybanner .eb-btn{flex:none;border:none;border-radius:9px;background:var(--accent);color:#fff;font:inherit;font-weight:600;font-size:13px;padding:9px 15px;cursor:pointer;white-space:nowrap}
-  .emptybanner .eb-btn:hover{filter:brightness(1.08)}
   @media(max-width:640px){.emptybanner{flex-direction:column;align-items:flex-start}.emptybanner .eb-btn{width:100%}}
   .updatebanner{margin:18px 0 0}
   .updatebanner .eb-p code{display:inline-block;margin-top:4px;background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.2);border-radius:6px;padding:3px 8px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all}
@@ -311,7 +321,6 @@
   .um-cmdbox{background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.2);border-radius:12px;padding:14px 16px;margin:0 0 14px}
   .um-cmdbox code{display:block;font:13.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);word-break:break-all;white-space:pre-wrap}
   .um-copybtn{width:100%;border:none;border-radius:11px;background:var(--accent);color:#fff;font:inherit;font-weight:650;font-size:14.5px;padding:13px 18px;cursor:pointer}
-  .um-copybtn:hover{filter:brightness(1.08)}
   .um-copybtn.copied{background:#2c7a3f}
   .um-copysub{text-align:center;font-size:12px;color:var(--muted);margin:8px 0 0;min-height:15px}
   .um-steps{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px;font-size:12px;color:var(--muted)}
@@ -340,7 +349,7 @@
   .lrow.dragover{border-color:var(--accent);box-shadow:inset 0 0 0 2px rgba(var(--accent-rgb),.16)}
   .lrow .lname{flex:1;font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .liconbtn{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:8px;padding:4px 9px;cursor:pointer;flex:none}
-  .liconbtn:hover{border-color:rgba(var(--accent-rgb),.5)}
+  .liconbtn:hover{background:var(--hover);border-color:rgba(var(--accent-rgb),.5);color:var(--ink)}
   .liconbtn:disabled{opacity:.32;cursor:default}
   .liconbtn.lvis.off{color:var(--muted)}
   .modal-foot{margin-top:15px;display:flex;justify-content:flex-end}
@@ -449,6 +458,8 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </span>
   </div>
   <button class="customizebtn" id="customize-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 18h6"/><path d="M14 12h6M4 12h4"/><circle cx="17" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>Customize layout</button>
+  <button class="widgetbtn" id="widget-add" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg><span id="widget-add-label">Add desktop widget</span></button>
+  <div class="widgetnote" id="widget-note" style="display:none">Couldn&rsquo;t set it up automatically. Install the free <a href="https://tracesof.net/uebersicht/" target="_blank" rel="noopener">Übersicht</a> app and click again — or <a href="/widget.jsx" download="token-burn.jsx">download the widget</a> and drop it into Übersicht&rsquo;s widgets folder.</div>
   <div class="navfoot"><span class="pulse"></span> Local-first · your prompts never leave your Mac</div>
 </nav>
 <div class="modal-overlay" id="layout-modal" style="display:none">
@@ -1555,6 +1566,32 @@ $("#refresh").addEventListener("click",async()=>{
     if(pb) pb.querySelectorAll('.psw').forEach(b=>b.classList.toggle('on',(b.dataset.c||'').toLowerCase()===c.toLowerCase())); post({primary:c}); }
   if(pb){ pb.addEventListener('click', e=>{ const b=e.target.closest('.psw'); if(b) setPrimary(b.dataset.c); });
     const ci=document.getElementById('primary-custom'); if(ci) ci.addEventListener('input', ()=>setPrimary(ci.value)); }
+})();
+// Add desktop widget — one click does everything: if Übersicht (free) is missing it's downloaded
+// and installed first, then the widget lands on the desktop. Once installed the button doubles as
+// "Refresh" (self-update refreshes the widget source, not the deployed copy).
+(function(){
+  const btn=document.getElementById('widget-add'), lbl=document.getElementById('widget-add-label'), note=document.getElementById('widget-note');
+  if(!btn||!lbl) return;
+  let st=null;
+  function render(){
+    if(!st||!st.widgetSourceOk){ btn.style.display='none'; return; }
+    btn.style.display='flex'; btn.classList.remove('done');
+    lbl.textContent = (st.ubersichtInstalled && st.widgetInstalled) ? 'Refresh desktop widget' : 'Add desktop widget';
+  }
+  btn.addEventListener('click', async ()=>{
+    if(!st||btn.disabled) return;
+    note.style.display='none'; btn.disabled=true;
+    lbl.textContent = st.ubersichtInstalled ? 'Adding…' : 'Installing Übersicht (free)…';
+    try{
+      const r=await fetch('/api/install_widget',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token:FIX_TOKEN})}).then(r=>r.json());
+      if(r&&r.ok){ st=r; btn.classList.add('done'); lbl.textContent='Widget added ✓'; setTimeout(render, 3000); }
+      else{ if(r&&typeof r.ubersichtInstalled!=='undefined') st=r; lbl.textContent='Couldn’t add widget'; note.style.display='block'; setTimeout(render, 4000); }
+    }catch(e){ lbl.textContent='Couldn’t add widget'; note.style.display='block'; setTimeout(render, 4000); }
+    btn.disabled=false;
+  });
+  apiJSON('/api/widget').then(s=>{ st=s; render(); }).catch(()=>{});
 })();
 // sidebar smooth-scroll nav
 (function(){
