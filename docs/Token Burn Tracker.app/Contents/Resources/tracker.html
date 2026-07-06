@@ -72,7 +72,7 @@
   .hero-live{display:inline-flex;align-items:center;gap:8px;margin-top:18px;color:var(--accent);font-size:13px;font-weight:650;
     background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.22);border-radius:999px;padding:6px 14px}
   .spark{margin-top:24px}
-  .spark svg{display:block;width:340px;max-width:100%;height:60px;overflow:visible}
+  .spark svg{display:block;width:100%;height:60px;overflow:visible}
   .sparklbl{font-size:11px;color:var(--muted);margin-top:6px}
   .hero-side{width:260px;flex:none;padding-top:4px}
   .prow{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--rule)}
@@ -408,6 +408,28 @@
   html[data-theme="soft"] .cell{border:none;background:#eef0f4;box-shadow:inset 2px 2px 5px var(--soft-d),inset -2px -2px 5px var(--soft-l)}
   html[data-theme="soft"] .cell.empty{background:transparent;box-shadow:none}
   html[data-theme="soft"] .um-card,html[data-theme="soft"] .modal{border:none;box-shadow:12px 12px 28px var(--soft-d),-12px -12px 28px var(--soft-l)}
+  /* ============ cost layer (v2.2.0) ============ */
+  .hero-cost{display:flex;align-items:baseline;gap:9px;margin-top:12px}
+  .hero-cost .hc-v{font-size:31px;font-weight:700;letter-spacing:-.02em;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1}
+  .hero-cost .hc-u{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:4px}
+  .prow .ptot{display:flex;flex-direction:column;align-items:flex-end;line-height:1.12}
+  .prow .ptot .pd{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
+  .prow .ptot .pk{font-size:11px;color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+  body.no-cost .prow .ptot .pd{display:none}
+  body.no-cost .prow .ptot .pk{font-size:17px;color:var(--ink);font-weight:650}
+  .flip-row{display:flex;align-items:center;gap:12px;margin-top:10px}
+  .flip-row .fl-lab{width:60px;flex:none;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .flip-bar{flex:1;display:flex;height:16px;border-radius:5px;overflow:hidden;background:#f0eee6}
+  .flip-bar span{height:100%}
+  .flip-leg{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
+  .flip-leg span{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+  .flip-note{margin-top:14px;background:rgba(var(--accent-rgb),.05);border:1px solid rgba(var(--accent-rgb),.18);border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.55}
+  .flip-note b{color:var(--accent)}
+  .kd0{background:rgba(var(--accent-rgb),.30)}
+  .kd1{background:rgba(var(--accent-rgb),.55)}
+  .kd2{background:rgba(var(--accent-rgb),.14)}
+  .kd3{background:var(--accent)}
+  .burncost{flex:none;font-size:11.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
 </style>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('tbTheme')||'light';}catch(e){}
 (function(){
@@ -418,7 +440,7 @@ var ca="__ACCENT__", cp="__PRIMARY__"; ap(ca); pp(cp);
 setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).then(function(t){if(!t)return;if(t.accent&&t.accent!==ca&&ap(t.accent))ca=t.accent;if((t.primary||'')!==cp){cp=t.primary||'';if(cp)pp(cp);}}).catch(function(){});},12000);
 })();</script>
 </head>
-<body>
+<body class="no-cost">
 <nav class="sidebar">
   <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="15" height="15"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="1.7" fill="none" stroke="#f3e0c8" stroke-width="2.2"/><path d="M9 3.6V20.4M15.4 3.6V13M9 13H20.4M15.4 8.2H20.4" stroke="#f3e0c8" stroke-width="2.2" fill="none"/></svg></span> Token Burn</div>
   <a class="nav on" data-go="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Overview</a>
@@ -514,17 +536,27 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
       <div class="hero-main">
         <div class="eyebrow">Today · <span id="hero-date">—</span></div>
         <div class="hero-num"><span class="v" id="p-day">—</span><span class="unit">tokens</span></div>
+        <div class="hero-cost" id="hero-cost" style="display:none"><span class="hc-v" id="p-day-cost">—</span><span class="hc-u">list-price equivalent today <span class="help" data-tip="What today’s usage would cost at public API list prices (rates via LiteLLM). Subscription plans don’t bill per token — this is an equivalent, not your actual bill.">?</span></span></div>
         <div class="hero-live hidden" id="hero-live"><span class="pulse"></span><span id="hero-burn">—</span></div>
         <div class="spark"><svg id="spark-svg" viewBox="0 0 340 60"></svg><div class="sparklbl">last 24 hours</div></div>
       </div>
       <div class="hero-side">
-        <div class="prow"><span>This week</span><b id="p-week">—</b></div>
-        <div class="prow"><span>This month</span><b id="p-month">—</b></div>
-        <div class="prow"><span>This year</span><b id="p-year">—</b></div>
-        <div class="prow last"><span>All-time</span><b id="p-all">—</b></div>
+        <div class="prow"><span>This week</span><b class="ptot"><span class="pd" id="c-week">—</span><span class="pk" id="p-week">—</span></b></div>
+        <div class="prow"><span>This month</span><b class="ptot"><span class="pd" id="c-month">—</span><span class="pk" id="p-month">—</span></b></div>
+        <div class="prow"><span>This year</span><b class="ptot"><span class="pd" id="c-year">—</span><span class="pk" id="p-year">—</span></b></div>
+        <div class="prow last"><span>All-time</span><b class="ptot"><span class="pd" id="c-all">—</span><span class="pk" id="p-all">—</span></b></div>
         <div id="tools"></div>
         <button class="addtoollink" id="add-tool-top">+ Add another AI tool to track</button>
       </div>
+    </div>
+
+    <div class="panel" id="cost-flip" style="display:none">
+      <h2>Where the cost actually lands <span class="help" data-tip="Your tokens split into four kinds that bill at very different rates — cache reads are cheap, output is dear. This shows the mix by count vs. by API-list-price.">?</span></h2>
+      <p class="cap">The same four token kinds, weighted two ways — by count, then by API-list-price. The mix flips.</p>
+      <div class="flip-row"><span class="fl-lab">Tokens</span><span class="flip-bar" id="flip-tok"></span></div>
+      <div class="flip-row"><span class="fl-lab">Cost</span><span class="flip-bar" id="flip-cost"></span></div>
+      <div class="flip-leg"><span><span class="dot kd0"></span>Input</span><span><span class="dot kd1"></span>Cache write</span><span><span class="dot kd2"></span>Cache read</span><span><span class="dot kd3"></span>Output</span></div>
+      <div class="flip-note" id="flip-note"></div>
     </div>
 
     <div id="empty-banner" class="emptybanner hidden">
@@ -670,6 +702,17 @@ function fmt(n){n=+n||0;
   return String(Math.round(n));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function hlp(tip, cls){ return `<span class="help${cls?(' '+cls):''}" data-tip="${esc(tip)}">?</span>`; }
+// ---- cost helpers (API-list-price equivalent) ----
+let BLENDED_RATE = 0;                 // $/token, set from /api/costs
+const DEFAULT_RATES = {input:3.00, cache_write:3.75, cache_read:0.30, output:15.00};  // fallback only
+function usd(n){ n=+n||0;
+  if(n>=1000) return "$"+Math.round(n).toLocaleString();
+  if(n>=0.01) return "$"+n.toFixed(2);
+  return n>0 ? "<$0.01" : "$0.00"; }
+function costOf(tokens){ return BLENDED_RATE * (+tokens||0); }
+function computeBlendedRate(bd){ bd=bd||{}; let tok=0, cost=0;
+  for(const k in DEFAULT_RATES){ const v=+bd[k]||0; tok+=v; cost += v/1e6*DEFAULT_RATES[k]; }
+  return tok>0 ? cost/tok : 0; }
 function hexA(hex,a){ const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; }
 const pad = n => String(n).padStart(2,"0");
 const isoLocal = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -825,11 +868,24 @@ function demoSeries(range){
   else sel=d.days;
   return {range,unit:'day',buckets:sel.map(x=>({ts:new Date(x.date+"T12:00:00").getTime(),tools:x.byTool})),scale:'linear'};
 }
+function demoCosts(){
+  const d=demoData();
+  const tb=d.tokenBreakdown||{};
+  const kinds=["input","cache_write","cache_read","output"];
+  let totTok=0, totUsd=0; const breakdown={};
+  kinds.forEach(k=>{ const t=+tb[k]||0, u=t/1e6*DEFAULT_RATES[k]; breakdown[k]={tokens:t,usd:+u.toFixed(2)}; totTok+=t; totUsd+=u; });
+  const blended = totTok>0 ? totUsd/totTok : 0;
+  const byDay=(d.days||[]).map(x=>[x.date, +(blended*(x.total||0)).toFixed(2)]);
+  return { note:"API-list-price equivalent (sample data).", pricesSource:"bundled", pricesAgeHours:null,
+    blendedRate:blended, tokenBreakdown:breakdown, byDay, total:+totUsd.toFixed(2),
+    byModel:[], byTool:{}, unmatchedModels:[], loading:false };
+}
 function demoPayload(url){
   markDemo();
   if(url.indexOf('/api/series')===0){ const m=/range=([a-z0-9]+)/.exec(url); return demoSeries(m?m[1]:'1m'); }
   if(url.indexOf('/api/live')===0) return demoLive();
   if(url.indexOf('/api/agents')===0) return demoAgents();
+  if(url.indexOf('/api/costs')===0) return demoCosts();
   return demoData();
 }
 async function apiJSON(url){
@@ -929,6 +985,7 @@ async function load(){
   }
   $("#loading").classList.add("hidden");
   render(d);
+  loadCosts();
 }
 
 function render(d){
@@ -990,6 +1047,45 @@ function render(d){
   $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; your prompts and chats never leave your Mac.`;
 }
 
+// ---- cost / $ layer ----
+function renderCostFlip(bd){
+  const el=$("#cost-flip"); if(!el) return;
+  bd=bd||{};
+  const kinds=["input","cache_write","cache_read","output"];
+  let tokTot=0, costTot=0; const tokV=[], costV=[];
+  kinds.forEach(k=>{ const o=bd[k]||{}; const t=+o.tokens||0, c=+o.usd||0; tokV.push(t); costV.push(c); tokTot+=t; costTot+=c; });
+  if(tokTot<=0 || costTot<=0){ el.style.display="none"; return; } el.style.display="";
+  const seg=(arr,tot)=>arr.map((v,i)=>`<span class="kd${i}" style="width:${(v/tot*100).toFixed(2)}%"></span>`).join("");
+  $("#flip-tok").innerHTML=seg(tokV,tokTot);
+  $("#flip-cost").innerHTML=seg(costV,costTot);
+  const crTok=tokV[2]/tokTot*100, crCost=costV[2]/costTot*100;
+  const outTok=tokV[3]/tokTot*100, outCost=costV[3]/costTot*100;
+  $("#flip-note").innerHTML=`<b>The flip:</b> cache reads are ${crTok.toFixed(0)}% of your tokens but only ${crCost.toFixed(0)}% of the list-price cost. Output is ${outTok.toFixed(0)}% of tokens — and ${outCost.toFixed(0)}% of the cost.`;
+}
+async function loadCosts(){
+  let c; try{ c = await apiJSON("/api/costs"); }catch(e){ return; }
+  if(!c || c.error){ return; }
+  const byDay = c.byDay || [];
+  const now = new Date();
+  const today = isoLocal(now);
+  const wk = new Date(now); wk.setDate(now.getDate() - now.getDay()); const weekStart = isoLocal(wk);
+  const ym = `${now.getFullYear()}-${pad(now.getMonth()+1)}`, yr = String(now.getFullYear());
+  let cDay=0,cWeek=0,cMonth=0,cYear=0,cAll=0;
+  byDay.forEach(row=>{ const d0=row[0], v=+row[1]||0; cAll+=v;
+    if(d0===today)cDay+=v;
+    if(d0>=weekStart && d0<=today)cWeek+=v;
+    if(String(d0).startsWith(ym))cMonth+=v;
+    if(String(d0).startsWith(yr))cYear+=v; });
+  BLENDED_RATE = (c.blendedRate!=null && c.blendedRate>0) ? c.blendedRate : 0;
+  const hasCost = cAll>0 && BLENDED_RATE>0;
+  document.body.classList.toggle("no-cost", !hasCost);
+  const hc=$("#hero-cost"); if(hc) hc.style.display = hasCost ? "" : "none";
+  const set=(id,v)=>{ const el=$(id); if(el) el.textContent = hasCost ? usd(v) : ""; };
+  set("#p-day-cost",cDay); set("#c-week",cWeek); set("#c-month",cMonth); set("#c-year",cYear); set("#c-all",cAll);
+  renderCostFlip(hasCost ? c.tokenBreakdown : null);
+  if(window.__lastLive) renderLive(window.__lastLive);   // refresh $/hr now BLENDED_RATE is set
+}
+
 // ---- calendar ----
 function calLevel(t){ if(t<1)return 0; if(t<1e6)return 1; if(t<1e7)return 2; if(t<5e7)return 3; return 4; }
 function renderCalendar(){
@@ -1033,9 +1129,14 @@ function smoothPathD(pts){
 async function loadSpark(){
   try{ const data=await apiJSON('/api/series?range=1d'); drawSpark((data&&data.buckets)||[]); }catch(e){}
 }
+let SPARK_BUCKETS=[];
 function drawSpark(buckets){
-  const svg=$("#spark-svg"); if(!svg) return; svg.innerHTML="";
-  const W=340,H=60;
+  const svg=$("#spark-svg"); if(!svg) return;
+  if(buckets!==undefined) SPARK_BUCKETS=buckets||[];
+  buckets=SPARK_BUCKETS;
+  svg.innerHTML="";
+  const W=Math.max(Math.round(svg.clientWidth||(svg.parentNode&&svg.parentNode.clientWidth)||340),120), H=60;
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
   svgEl("line",{x1:0,y1:H-1,x2:W,y2:H-1,stroke:"var(--rule)","stroke-width":1},svg);
   if(!buckets.length) return;
   const tot=buckets.map(b=>{let s=0;const t=b.tools||{};for(const k in t)s+=t[k];return s;});
@@ -1050,6 +1151,7 @@ function drawSpark(buckets){
   const last=pts[n-1];
   svgEl("circle",{cx:last[0],cy:last[1],r:3,fill:"var(--accent)"},svg);
 }
+window.addEventListener("resize",()=>{ clearTimeout(window.__sparkRz); window.__sparkRz=setTimeout(()=>{ try{ drawSpark(); }catch(e){} },150); });
 
 // ---- time series (stock-style ranges, live) ----
 let TS_RANGE = "1m";
@@ -1310,6 +1412,7 @@ function renderTokenBreakdown(bd){
 // ---- running now (merged: chats + processes, one titled list) ----
 function renderLive(d){
   d=d||{};
+  window.__lastLive = d;
   $("#live-at").textContent = d.at ? ("as of "+d.at) : "";
   const b=d.burn||{}; const sy=d.system||{};
   // hero burn chip
@@ -1317,7 +1420,7 @@ function renderLive(d){
   if(hl && hb){
     const pm=+b.perMin||0;
     if(pm>0){
-      hb.textContent=`burning ${fmt(pm)}/min right now`;
+      hb.textContent = (BLENDED_RATE>0) ? `burning ${fmt(pm)}/min · ~${usd(costOf(pm*60))}/hr` : `burning ${fmt(pm)}/min right now`;
       hl.title=`${fmt(b.tokens||0)} tokens in the last ${b.windowMin||10} min`;
       hl.classList.remove("hidden");
     } else hl.classList.add("hidden");
@@ -1337,10 +1440,11 @@ function renderLive(d){
     el.innerHTML=r.map(x=>{
       const c=COLOR[x.tool]||"#999";
       const burn = (x.burnMin>0) ? `<span class="burnchip" title="tokens burned by this session in the last 10 min">${fmt(x.burnMin)}/min</span>` : "";
+      const bcost = (x.burnMin>0 && BLENDED_RATE>0) ? `<span class="burncost" title="approx list-price per hour at this rate">~${usd(costOf(x.burnMin*60))}/hr</span>` : "";
       return `<div class="liverow"><span class="dot" style="background:${c}"></span>`+
              `<span class="nm" title="${esc(x.title)}">${esc(x.title)}</span>`+
              `<span class="livekind">${esc(x.tool)}</span>`+
-             `${burn}<span class="meta">${esc(x.meta||'')}</span></div>`;
+             `${burn}${bcost}<span class="meta">${esc(x.meta||'')}</span></div>`;
     }).join("");
   }
   const idle=$("#idle-note"), ids=d.idle||[];
@@ -1648,7 +1752,7 @@ $("#refresh").addEventListener("click",async()=>{
 })();
 load();
 pollLive(); pollAgents();
-setInterval(()=>{ pollLive(); pollAgents(); loadSeries(TS_RANGE); loadSpark(); }, 8000);
+setInterval(()=>{ pollLive(); pollAgents(); loadSeries(TS_RANGE); loadSpark(); loadCosts(); }, 8000);
 </script>
 </body>
 </html>

@@ -1936,6 +1936,8 @@ def cost_data():
     um = (d.get("usageMatrix") or {})
     pmap, source, ts = prices()
     rate_cache, by_model, unmatched = {}, [], []
+    kinds_tok = [0, 0, 0, 0]            # input, cache_write, cache_read, output
+    kinds_usd = [0.0, 0.0, 0.0, 0.0]
     def usd(model, v):
         if model not in rate_cache:
             rate_cache[model] = match_price(model, pmap)
@@ -1951,6 +1953,9 @@ def cost_data():
                 unmatched.append(m)
             continue
         rates, mk = rate_cache[m]
+        for _i in range(4):                       # accumulate the 4-way split, tokens + $ at real rates
+            kinds_tok[_i] += v[_i]
+            kinds_usd[_i] += v[_i] * rates[_i] / 1e6
         by_model.append({"model": m, "tokens": toks, "usd": round(c, 2),
                          "approx": v[4] > 0, "rateKey": mk})
     by_day = []
@@ -1965,6 +1970,11 @@ def cost_data():
     today = datetime.date.today().isoformat()
     weekago = (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
     monthago = (datetime.date.today() - datetime.timedelta(days=29)).isoformat()
+    kind_names = ["input", "cache_write", "cache_read", "output"]
+    token_breakdown = {kind_names[i]: {"tokens": kinds_tok[i], "usd": round(kinds_usd[i], 2)} for i in range(4)}
+    tot_usd = sum(x["usd"] for x in by_model)
+    tot_tok = sum(x["tokens"] for x in by_model)
+    blended_rate = (tot_usd / tot_tok) if tot_tok > 0 else 0.0   # $/token, for live $/hr + period equivalents
     return {"note": "API-list-price equivalent. Subscription plans don't bill per token — "
                     "this is what the same usage would cost at public API rates.",
             "pricesSource": source,
@@ -1974,6 +1984,7 @@ def cost_data():
             "week": round(sum(c for dt, c in by_day if dt >= weekago), 2),
             "month": round(sum(c for dt, c in by_day if dt >= monthago), 2),
             "byModel": by_model, "byDay": by_day, "byTool": by_tool,
+            "tokenBreakdown": token_breakdown, "blendedRate": blended_rate,
             "unmatchedModels": unmatched, "loading": STATE["loading"]}
 
 # ---------- server ----------
@@ -2143,7 +2154,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(403, json.dumps({"error": "non-local request refused"})); return
         if self.path in ("/", "/index.html"):
             try:
-                html = open(os.path.join(HERE, "tracker.html"), "r", encoding="utf-8").read()
+                html = open(os.path.join(HERE, os.environ.get("TOKENBURN_HTML", "tracker.html")), "r", encoding="utf-8").read()
                 _t = load_theme()
                 html = html.replace("__FIX_TOKEN__", FIX_TOKEN).replace("__ACCENT__", _t["accent"]).replace("__PRIMARY__", _t["primary"])
                 self._send(200, html, "text/html; charset=utf-8")

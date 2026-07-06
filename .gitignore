@@ -35,3 +35,9 @@ probe*.txt
 # this repo and hardcodes one screen's widget positions. Not needed to run the app.
 apply-layout.command
 tracker.html.prev
+
+# LiteLLM price-map cache (fetched at runtime, 24h TTL — like .cache.json)
+.prices.json
+
+# Dev preview of the next redesign; promoted into tracker.html at release time
+tracker-redesign.html
