@@ -18,6 +18,11 @@
 - Stale `.git/*.lock` warnings during sandbox commits are harmless; if git errors on locks, remove them from the host Mac.
 - Sandbox has no GitHub credentials: commit sandbox-side, the user runs `git push origin main`.
 
+## Cost engine (backend, awaiting UI)
+- `GET /api/costs` = dollar view of the usage matrix (tokens × public API list prices from LiteLLM's sheet, cached 24h in `.prices.json`, bundled offline fallback; opt-out `TOKENBURN_PRICES=off`).
+- Copy rule: it's an **"API-list-price equivalent"** — subscription plans don't bill per token. Never present it as an invoice or actual spend.
+- Unsplit tokens (Codex/custom sources expose totals only) are priced at the input rate and flagged `approx`; unmatched models are listed, never guessed.
+
 ## Privacy copy rules (exact)
 - OK: "Local-first — your prompts and chats never leave your Mac" + "anonymous, aggregate usage stats (opt-out: TOKENBURN_ANALYTICS=off)".
 - NEVER claim "no telemetry" or "100% local".

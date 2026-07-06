@@ -248,7 +248,7 @@ def analytics_error(where, err):
         pass
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 10   # bumped: fallback titles are now sanitized at capture (no <system-reminder> fragments) — recapture them
+CACHE_VERSION = 11   # bumped: entries now carry a per-record input/cache/output split (cost engine)
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -369,7 +369,9 @@ def claude_entries(path, tool, file_date):
                 slug = d.get("slug")
                 if slug:
                     titles.setdefault(sk, str(slug).replace("-", " "))
-                entries.append([date, tool, msg.get("model") or "?", d.get("cwd") or default_cwd, tk, sk, path])
+                entries.append([date, tool, msg.get("model") or "?", d.get("cwd") or default_cwd, tk, sk, path,
+                                [u.get("input_tokens") or 0, u.get("cache_creation_input_tokens") or 0,
+                                 u.get("cache_read_input_tokens") or 0, u.get("output_tokens") or 0]])
     except Exception:
         pass
     return entries, titles, tb
@@ -780,7 +782,12 @@ def aggregate(entries, titles):
     sess_paths = defaultdict(set)   # session key -> ALL transcript files, so the real title resolves even if the first file misses
     sess_date = {}   # session key -> latest activity date (to find the chat in the app's date-grouped list)
     grand = 0
-    for date, tl, md, cwd, tk, sk, fpath in entries:
+    usage_model = defaultdict(lambda: [0, 0, 0, 0, 0])                      # input, cache_write, cache_read, output, unsplit
+    usage_day_model = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
+    usage_tool_model = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
+    for e in entries:
+        date, tl, md, cwd, tk, sk, fpath = e[:7]
+        split = e[7] if len(e) > 7 and isinstance(e[7], (list, tuple)) and len(e[7]) == 4 else None
         if not date or len(date) < 10:
             date = "unknown"
         day[date][tl] += tk
@@ -801,6 +808,12 @@ def aggregate(entries, titles):
             sess_paths[sk].add(fpath)
         if date != "unknown" and date > sess_date.get(sk, ""):
             sess_date[sk] = date
+        um, udm, utm = usage_model[md], usage_day_model[date][md], usage_tool_model[tl][md]
+        if split:
+            for i in range(4):
+                um[i] += split[i]; udm[i] += split[i]; utm[i] += split[i]
+        else:   # tools that only expose totals (Codex, custom sources)
+            um[4] += tk; udm[4] += tk; utm[4] += tk
         grand += tk
     today = datetime.date.today().isoformat()
     weekago = (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
@@ -842,7 +855,10 @@ def aggregate(entries, titles):
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
             "grand": grand, "today": day_total.get(today, 0), "week": week,
             "byTool": dict(tool), "days": days, "byProject": byProject,
-            "byModel": byModel, "bySession": bySession, "projectPaths": proj_path}
+            "byModel": byModel, "bySession": bySession, "projectPaths": proj_path,
+            "usageMatrix": {"byModel": {k: list(v) for k, v in usage_model.items()},
+                            "byDayModel": {d_: {m: list(v) for m, v in mm.items()} for d_, mm in usage_day_model.items()},
+                            "byToolModel": {t_: {m: list(v) for m, v in mm.items()} for t_, mm in usage_tool_model.items()}}}
 
 def summary():
     d = _fresh_session_titles(STATE["data"] or {})
@@ -1821,6 +1837,145 @@ def series(rng):
     SERIES_CACHE[rng] = (now, out)
     return out
 
+# ---------- token cost engine (API-list-price equivalent) ----------
+# Turns the usage matrix (tokens by model, split into input/cache-write/cache-read/output)
+# into dollar figures at public API list prices. Rates come from LiteLLM's community-maintained
+# price sheet (fetched lazily, cached 24h in DATA_DIR/.prices.json, fail-silent) with a small
+# bundled fallback so it works offline. IMPORTANT copy note: subscription plans don't bill per
+# token — always present this as "API-equivalent value", never as an invoice.
+PRICES_FILE = os.path.join(DATA_DIR, ".prices.json")
+PRICES_URL = os.environ.get("TOKENBURN_PRICES_URL",
+                            "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json")
+PRICES_ON = os.environ.get("TOKENBURN_PRICES", "on").lower() not in ("off", "0", "false", "no")
+PRICES_TTL = 24 * 3600
+# Offline fallback only — USD per 1M tokens: [input, cache_write, cache_read, output] (approx list prices)
+_BUNDLED_PRICES = {
+    "claude-opus-4":     [15.0, 18.75, 1.50, 75.0],
+    "claude-sonnet-4":   [3.0, 3.75, 0.30, 15.0],
+    "claude-3-7-sonnet": [3.0, 3.75, 0.30, 15.0],
+    "claude-3-5-haiku":  [0.80, 1.00, 0.08, 4.0],
+    "claude-haiku-4-5":  [1.0, 1.25, 0.10, 5.0],
+    "gpt-4o":            [2.5, 0.0, 1.25, 10.0],
+    "gpt-4o-mini":       [0.15, 0.0, 0.075, 0.60],
+    "gpt-5":             [1.25, 0.0, 0.125, 10.0],
+}
+_PRICES = {"map": None, "ts": 0.0, "source": "bundled"}
+_PRICES_LOCK = threading.Lock()
+
+def _parse_litellm(raw):
+    """LiteLLM sheet -> {normalized model name: [in, cw, cr, out] USD per 1M tokens}."""
+    out = {}
+    for name, v in (raw or {}).items():
+        if not isinstance(v, dict):
+            continue
+        ci, co = v.get("input_cost_per_token"), v.get("output_cost_per_token")
+        if not isinstance(ci, (int, float)) or not isinstance(co, (int, float)):
+            continue
+        cw = v.get("cache_creation_input_token_cost") or 0
+        cr = v.get("cache_read_input_token_cost") or 0
+        rates = [ci * 1e6, (cw or 0) * 1e6, (cr or 0) * 1e6, co * 1e6]
+        key = name.lower().split("/")[-1]           # "anthropic/claude-x" -> "claude-x"
+        out.setdefault(key, rates)
+    return out
+
+def _refresh_prices_bg():
+    def _run():
+        try:
+            req = urllib.request.Request(PRICES_URL, headers={"User-Agent": "TokenBurnTracker"})
+            raw = json.loads(urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "replace"))
+            pm = _parse_litellm(raw)
+            if pm:
+                with _PRICES_LOCK:
+                    _PRICES["map"], _PRICES["ts"], _PRICES["source"] = pm, time.time(), "litellm"
+                try:
+                    json.dump({"ts": _PRICES["ts"], "map": pm}, open(PRICES_FILE, "w"))
+                except Exception:
+                    pass
+        except Exception:
+            pass   # fail-silent: bundled/stale rates keep working
+    threading.Thread(target=_run, daemon=True).start()
+
+def prices():
+    """Best available rate map + its source. Never blocks on the network."""
+    with _PRICES_LOCK:
+        if _PRICES["map"] and time.time() - _PRICES["ts"] < PRICES_TTL:
+            return _PRICES["map"], _PRICES["source"], _PRICES["ts"]
+    try:   # disk cache from a previous run
+        j = json.load(open(PRICES_FILE))
+        if isinstance(j.get("map"), dict) and j["map"]:
+            with _PRICES_LOCK:
+                _PRICES["map"], _PRICES["ts"], _PRICES["source"] = j["map"], j.get("ts", 0), "litellm"
+    except Exception:
+        pass
+    if PRICES_ON and (not _PRICES["map"] or time.time() - _PRICES["ts"] >= PRICES_TTL):
+        _refresh_prices_bg()
+    if _PRICES["map"]:
+        return _PRICES["map"], _PRICES["source"], _PRICES["ts"]
+    return _BUNDLED_PRICES, "bundled", 0
+
+def match_price(model, pmap):
+    """Model name from the logs -> (rates, matched_key). Tolerates date suffixes and prefixes."""
+    if not model or model == "?":
+        return None, None
+    n = model.lower().split("/")[-1]
+    if n in pmap:
+        return pmap[n], n
+    base = re.sub(r"[-_]\d{8}$", "", n)   # strip trailing -YYYYMMDD build dates
+    if base in pmap:
+        return pmap[base], base
+    best = None
+    for k in pmap:
+        if (n.startswith(k) or base.startswith(k) or k.startswith(base)) and (best is None or len(k) > len(best)):
+            best = k
+    return (pmap[best], best) if best else (None, None)
+
+def cost_data():
+    """Dollar view of the usage matrix. Unsplit tokens (Codex/custom: totals only) are priced
+    at the model's input rate and flagged approximate. Unmatched models are listed, not guessed."""
+    d = STATE["data"] or {}
+    um = (d.get("usageMatrix") or {})
+    pmap, source, ts = prices()
+    rate_cache, by_model, unmatched = {}, [], []
+    def usd(model, v):
+        if model not in rate_cache:
+            rate_cache[model] = match_price(model, pmap)
+        rates, _k = rate_cache[model]
+        if not rates:
+            return None
+        return (v[0] * rates[0] + v[1] * rates[1] + v[2] * rates[2] + v[3] * rates[3] + v[4] * rates[0]) / 1e6
+    for m, v in sorted((um.get("byModel") or {}).items(), key=lambda x: -sum(x[1])):
+        c = usd(m, v)
+        toks = sum(v)
+        if c is None:
+            if toks > 0:
+                unmatched.append(m)
+            continue
+        rates, mk = rate_cache[m]
+        by_model.append({"model": m, "tokens": toks, "usd": round(c, 2),
+                         "approx": v[4] > 0, "rateKey": mk})
+    by_day = []
+    for date, mm in sorted((um.get("byDayModel") or {}).items()):
+        if date == "unknown":
+            continue
+        c = sum(filter(None, (usd(m, v) for m, v in mm.items())))
+        by_day.append([date, round(c, 2)])
+    by_tool = {}
+    for t, mm in (um.get("byToolModel") or {}).items():
+        by_tool[t] = round(sum(filter(None, (usd(m, v) for m, v in mm.items()))), 2)
+    today = datetime.date.today().isoformat()
+    weekago = (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
+    monthago = (datetime.date.today() - datetime.timedelta(days=29)).isoformat()
+    return {"note": "API-list-price equivalent. Subscription plans don't bill per token — "
+                    "this is what the same usage would cost at public API rates.",
+            "pricesSource": source,
+            "pricesAgeHours": round((time.time() - ts) / 3600, 1) if ts else None,
+            "total": round(sum(c for _, c in by_day), 2),
+            "today": next((c for dt, c in by_day if dt == today), 0.0),
+            "week": round(sum(c for dt, c in by_day if dt >= weekago), 2),
+            "month": round(sum(c for dt, c in by_day if dt >= monthago), 2),
+            "byModel": by_model, "byDay": by_day, "byTool": by_tool,
+            "unmatchedModels": unmatched, "loading": STATE["loading"]}
+
 # ---------- server ----------
 THEME_FILE = os.path.join(DATA_DIR, "theme.json")
 def _is_hex(a):
@@ -2002,6 +2157,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps(load_theme()))
         elif self.path.startswith("/api/widget"):
             self._send(200, json.dumps(widget_status()))
+        elif self.path.startswith("/api/costs"):
+            self._send(200, json.dumps(cost_data()))
         elif self.path.startswith("/widget.jsx"):
             # Plain-download fallback (no Übersicht detected, or user prefers manual):
             # a ready-to-use single-file widget — drop it into Übersicht's widgets folder.
