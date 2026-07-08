@@ -1520,12 +1520,41 @@ def kill_leftovers():
     return {"ok": True, "killed": killed, "failed": failed,
             "count": len(killed), "freedMB": freed}
 
+def _set_price_override(model, rate):
+    """Write/merge a single model rate into prices_override.json (USD per 1M tokens). Custom/Codex
+    tokens are unsplit and priced at the input rate, so one rate covers all four kinds. Stdlib, no net."""
+    if not model:
+        return
+    try:
+        cur = {}
+        if os.path.exists(OVERRIDES_FILE):
+            try:
+                cur = json.load(open(OVERRIDES_FILE)) or {}
+                if not isinstance(cur, dict):
+                    cur = {}
+            except Exception:
+                cur = {}
+        cur[str(model).lower()] = [rate, rate, rate, rate]
+        json.dump(cur, open(OVERRIDES_FILE, "w"), indent=2)
+        _OVR["mtime"] = -1.0   # force _load_overrides() to re-read on next prices()
+    except Exception:
+        pass
+
 def add_source(body):
     name = (body.get("name") or "").strip()
     glob_ = (body.get("glob") or "").strip()
     token_keys = [k.strip() for k in (body.get("tokenKeys") or "").split(",") if k.strip()]
     ts_keys = [k.strip() for k in (body.get("tsKeys") or "").split(",") if k.strip()]
     process = (body.get("process") or "").strip()
+    rate = None
+    rv = body.get("rate")
+    if rv not in (None, ""):
+        try:
+            r = float(rv)
+            if r > 0:
+                rate = r
+        except Exception:
+            return {"ok": False, "error": "Rate must be a number (USD per 1M tokens), e.g. 3."}
     if not name:
         return {"ok": False, "error": "Give the tool a name."}
     if name in ("Claude Code", "Cowork", "Codex"):
@@ -1544,6 +1573,12 @@ def add_source(body):
         src["process"] = process
     if body.get("color"):
         src["color"] = body["color"]
+    if rate is not None:
+        # Price this custom tool by tagging its entries with a stable model key and writing that
+        # key's rate into prices_override.json — so its tokens appear in the $ figures (optional; blank = excluded).
+        model_key = name.lower()
+        src["model"] = model_key
+        _set_price_override(model_key, rate)
     lst.append(src)
     if not save_custom_sources(lst):
         return {"ok": False, "error": "Couldn't write the config file."}
@@ -1556,7 +1591,10 @@ def remove_source(body):
 
 def fmt_tok(n):
     n = n or 0
-    if n >= 1e9: return f"{n/1e9:.2f}B"
+    def _strip(x):
+        return re.sub(r"\.?0+$", "", f"{x:.2f}")
+    if n >= 1e12: return _strip(n / 1e12) + "T"
+    if n >= 1e9: return _strip(n / 1e9) + "B"
     if n >= 1e6: return f"{n/1e6:.0f}M"
     if n >= 1e3: return f"{n/1e3:.0f}K"
     return str(int(n))
@@ -1844,6 +1882,23 @@ def series(rng):
 # bundled fallback so it works offline. IMPORTANT copy note: subscription plans don't bill per
 # token — always present this as "API-equivalent value", never as an invoice.
 PRICES_FILE = os.path.join(DATA_DIR, ".prices.json")
+# Optional local price override, layered on top of the LiteLLM map. Lets any missing/custom model
+# be priced with NO network call (local-first). Format: {"model-name": [input, cache_write, cache_read,
+# output]} = USD per 1M tokens. Keys are lowercased to match match_price(). mtime-cached, stdlib only.
+OVERRIDES_FILE = os.path.join(DATA_DIR, "prices_override.json")
+_OVR = {"map": {}, "mtime": -1.0}
+def _load_overrides():
+    try:
+        m = os.stat(OVERRIDES_FILE).st_mtime
+        if m != _OVR["mtime"]:
+            j = json.load(open(OVERRIDES_FILE))
+            _OVR["map"] = {str(k).lower(): v for k, v in j.items()
+                           if isinstance(v, (list, tuple)) and len(v) >= 4}
+            _OVR["mtime"] = m
+    except Exception:
+        if _OVR["mtime"] < 0:
+            _OVR["map"] = {}
+    return _OVR["map"]
 PRICES_URL = os.environ.get("TOKENBURN_PRICES_URL",
                             "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json")
 PRICES_ON = os.environ.get("TOKENBURN_PRICES", "on").lower() not in ("off", "0", "false", "no")
@@ -1896,10 +1951,14 @@ def _refresh_prices_bg():
     threading.Thread(target=_run, daemon=True).start()
 
 def prices():
-    """Best available rate map + its source. Never blocks on the network."""
+    """Best available rate map + its source, with any local prices_override.json layered on top.
+    Never blocks on the network."""
+    def _merge(m, src, ts):
+        o = _load_overrides()
+        return (({**m, **o}) if o else m), src, ts
     with _PRICES_LOCK:
         if _PRICES["map"] and time.time() - _PRICES["ts"] < PRICES_TTL:
-            return _PRICES["map"], _PRICES["source"], _PRICES["ts"]
+            return _merge(_PRICES["map"], _PRICES["source"], _PRICES["ts"])
     try:   # disk cache from a previous run
         j = json.load(open(PRICES_FILE))
         if isinstance(j.get("map"), dict) and j["map"]:
@@ -1910,8 +1969,8 @@ def prices():
     if PRICES_ON and (not _PRICES["map"] or time.time() - _PRICES["ts"] >= PRICES_TTL):
         _refresh_prices_bg()
     if _PRICES["map"]:
-        return _PRICES["map"], _PRICES["source"], _PRICES["ts"]
-    return _BUNDLED_PRICES, "bundled", 0
+        return _merge(_PRICES["map"], _PRICES["source"], _PRICES["ts"])
+    return _merge(_BUNDLED_PRICES, "bundled", 0)
 
 def match_price(model, pmap):
     """Model name from the logs -> (rates, matched_key). Tolerates date suffixes and prefixes."""

@@ -39,5 +39,8 @@ tracker.html.prev
 # LiteLLM price-map cache (fetched at runtime, 24h TTL — like .cache.json)
 .prices.json
 
+# Local per-model price overrides (written at runtime into DATA_DIR)
+prices_override.json
+
 # Dev preview of the next redesign; promoted into tracker.html at release time
 tracker-redesign.html

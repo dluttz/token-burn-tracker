@@ -69,6 +69,11 @@
   .hero-num{display:flex;align-items:baseline;gap:12px;margin-top:10px}
   .hero-num .v{font-size:76px;font-weight:700;letter-spacing:-.04em;line-height:.95;font-variant-numeric:tabular-nums}
   .hero-num .unit{font-size:16px;color:var(--muted);font-weight:500}
+  /* friendly hero state (first-run, or idle-today) instead of a lone giant "0" */
+  .hero-num.msg{display:block;margin-top:10px}
+  .hero-num.msg .v{font-size:23px;font-weight:650;letter-spacing:-.01em;line-height:1.3;color:var(--ink);display:block}
+  .hero-num.msg .v .sub2{display:block;font-size:14px;font-weight:500;color:var(--muted);margin-top:3px;letter-spacing:normal}
+  .hero-num.msg .unit{display:none}
   .hero-live{display:inline-flex;align-items:center;gap:8px;margin-top:18px;color:var(--accent);font-size:13px;font-weight:650;
     background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.22);border-radius:999px;padding:6px 14px}
   .spark{margin-top:24px}
@@ -98,8 +103,9 @@
     background:#1f1e1b;color:#fdfcf8;font-size:12px;font-weight:400;line-height:1.5;padding:8px 11px;border-radius:8px;text-align:left;
     text-transform:none;letter-spacing:normal;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s;transition-delay:0s;z-index:60}
   .help:hover::after{opacity:1;visibility:visible;transition-delay:.3s}
+  .help:focus-visible::after{opacity:1;visibility:visible;transition-delay:0s}
+  .help:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--muted);color:var(--ink)}
   .help.r::after{left:auto;right:-4px;transform:none}
-  body.is-scrolling .help::after{opacity:0!important;visibility:hidden!important;transition:none!important}
 
   /* ============ panels ============ */
   .panel{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:24px 26px;margin:22px 0;scroll-margin-top:24px}
@@ -295,6 +301,20 @@
   @media(max-width:640px){.addrow{grid-template-columns:1fr;gap:3px}}
   .addtoollink{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0;border:none;background:transparent;color:var(--accent);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 0}
   .addtoollink:hover{text-decoration:underline}
+  .addhelp{margin:12px 0 4px}
+  .addhelp>summary{cursor:pointer;color:var(--accent);font-size:12.5px;font-weight:600;list-style:none;padding:6px 0;display:inline-flex;align-items:center;gap:6px}
+  .addhelp>summary::-webkit-details-marker{display:none}
+  .addhelp>summary::before{content:"▸";font-size:10px;transition:transform .15s}
+  .addhelp[open]>summary::before{transform:rotate(90deg)}
+  .addhelp-body{margin-top:8px;font-size:12.5px;line-height:1.55;color:var(--muted)}
+  .addhelp-body p{margin:0 0 10px}
+  .addex{border:1px solid var(--rule);border-radius:10px;padding:11px 13px;margin:0 0 10px;background:var(--panel)}
+  .addex>b{display:block;font-size:12.5px;color:var(--ink);margin-bottom:6px}
+  .addex-row{display:grid;grid-template-columns:120px 1fr;gap:10px;margin:4px 0;align-items:baseline}
+  .addex-row>span{color:var(--muted)}
+  .addex code,.addex-tip code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(var(--accent-rgb),.08);border-radius:5px;padding:1px 6px;color:var(--ink);word-break:break-all}
+  .addex-tip{margin:0}
+  @media(max-width:640px){.addex-row{grid-template-columns:1fr;gap:1px}}
 
   /* ============ banners / modals ============ */
   .emptybanner{display:flex;align-items:center;gap:15px;background:rgba(var(--accent-rgb),.04);border:1px solid rgba(var(--accent-rgb),.2);border-radius:14px;padding:15px 17px;margin:18px 0 0}
@@ -358,9 +378,23 @@
   ::-webkit-scrollbar-thumb{background:#dedbd0;border-radius:8px;border:3px solid transparent;background-clip:content-box}
   ::-webkit-scrollbar-thumb:hover{background:#cbc7ba;background-clip:content-box}
 
+  /* ===== narrow-window top bar + off-canvas drawer (≤940px) ===== */
+  .mobtop{display:none}
+  .navscrim{display:none}
   @media(max-width:940px){
-    .sidebar{display:none}
-    .wrap{margin:0 auto;padding:20px 18px 80px}
+    .mobtop{display:flex;align-items:center;gap:12px;position:fixed;top:0;left:0;right:0;height:52px;z-index:60;
+      padding:0 14px;background:var(--bg);border-bottom:1px solid var(--rule)}
+    .mobham{display:flex;align-items:center;justify-content:center;width:38px;height:38px;flex:none;border:1px solid var(--rule);
+      background:var(--panel);color:var(--ink);border-radius:9px;cursor:pointer;padding:0}
+    .mobham:hover{background:var(--hover)}
+    .mobbrand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13.5px;letter-spacing:-.01em}
+    .mobbrand .logo{width:24px;height:24px;border-radius:7px;background:var(--accent);flex:none;display:flex;align-items:center;justify-content:center;color:#fff}
+    /* the real sidebar becomes an off-canvas drawer — every existing control + handler comes along */
+    .sidebar{transform:translateX(-100%);transition:transform .22s ease;width:260px;z-index:120;box-shadow:0 0 40px rgba(0,0,0,.18)}
+    body.nav-open .sidebar{transform:translateX(0)}
+    body.nav-open .navscrim{display:block;position:fixed;inset:0;z-index:110;background:rgba(26,26,23,.4);
+      backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+    .wrap{margin:0 auto;padding:66px 18px 80px}
     h1{display:block}
   }
 
@@ -430,6 +464,20 @@
   .kd2{background:rgba(var(--accent-rgb),.14)}
   .kd3{background:var(--accent)}
   .burncost{flex:none;font-size:11.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+  .copytoast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-12px);z-index:300;
+    background:#2c7a3f;color:#fff;font-size:13px;font-weight:650;padding:9px 16px;border-radius:999px;
+    box-shadow:0 6px 20px rgba(26,26,23,.22);opacity:0;pointer-events:none;transition:opacity .16s,transform .16s;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+  .copytoast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media(max-width:940px){.copytoast{top:60px}}
+  .unmatched-note{margin-top:8px;font-size:11.5px;line-height:1.5;color:var(--muted)}
+  .unmatched-note b{color:var(--ink);font-weight:600}
+  .unmatched-note code{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:rgba(var(--accent-rgb),.08);border-radius:5px;padding:1px 5px}
+  .cbm-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:9px 2px;border-bottom:1px solid var(--rule);font-size:13px}
+  .cbm-row:last-child{border-bottom:none}
+  .cbm-row .cbm-nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .cbm-row .cbm-tok{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .cbm-row .cbm-usd{font-weight:650;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;color:var(--accent)}
+  .cbm-row .cbm-ap{font-size:10.5px;color:var(--muted);font-weight:600;margin-right:3px}
 </style>
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('tbTheme')||'light';}catch(e){}
 (function(){
@@ -441,16 +489,28 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
 })();</script>
 </head>
 <body class="no-cost">
-<nav class="sidebar">
+<!-- narrow-window top bar (≤940px): hamburger opens the same sidebar as an off-canvas drawer,
+     so all its controls (nav, theme, accent, Customize layout, Add widget) are reachable — no duplicated logic -->
+<div class="mobtop" id="mob-top">
+  <button class="mobham" id="mob-ham" aria-label="Open navigation" aria-expanded="false" aria-controls="the-sidebar">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <span class="mobbrand"><span class="logo"><svg viewBox="0 0 24 24" width="13" height="13"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="1.7" fill="none" stroke="#f3e0c8" stroke-width="2.2"/><path d="M9 3.6V20.4M15.4 3.6V13M9 13H20.4M15.4 8.2H20.4" stroke="#f3e0c8" stroke-width="2.2" fill="none"/></svg></span> Token Burn</span>
+</div>
+<div class="navscrim" id="nav-scrim"></div>
+<!-- [18] copy confirmation toast — fixed near the top of the viewport + aria-live, so a "Copied ✓"
+     is always visible and announced even when the button that was clicked is scrolled off-screen -->
+<div class="copytoast" id="copy-toast" role="status" aria-live="polite"></div>
+<nav class="sidebar" id="the-sidebar">
   <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="15" height="15"><rect x="2.6" y="2.6" width="18.8" height="18.8" rx="1.7" fill="none" stroke="#f3e0c8" stroke-width="2.2"/><path d="M9 3.6V20.4M15.4 3.6V13M9 13H20.4M15.4 8.2H20.4" stroke="#f3e0c8" stroke-width="2.2" fill="none"/></svg></span> Token Burn</div>
   <a class="nav on" data-go="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Overview</a>
   <a class="nav" data-go="Running now"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg>Running now</a>
-  <a class="nav" data-go="Sub-agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Agents</a>
+  <a class="nav" data-go="Agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Agents</a>
   <a class="nav" data-go="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>Calendar</a>
   <a class="nav" data-go="Over time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 3 4-7"/></svg>Over time</a>
-  <a class="nav" data-go="top projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Projects</a>
-  <a class="nav" data-go="more efficient"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>Efficiency</a>
-  <a class="nav" data-go="suggested fixes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg>Fixes</a>
+  <a class="nav" data-go="Projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Projects</a>
+  <a class="nav" data-go="Efficiency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>Efficiency</a>
+  <a class="nav" data-go="Fixes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg>Fixes</a>
   <a class="nav" data-go="Tracked tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Tools</a>
   <div class="themeswitch" id="theme-switch">
     <button data-theme="light">Light</button><button data-theme="dark">Dark</button><button data-theme="soft">Soft</button>
@@ -537,6 +597,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
         <div class="eyebrow">Today · <span id="hero-date">—</span></div>
         <div class="hero-num"><span class="v" id="p-day">—</span><span class="unit">tokens</span></div>
         <div class="hero-cost" id="hero-cost" style="display:none"><span class="hc-v" id="p-day-cost">—</span><span class="hc-u">list-price equivalent today <span class="help" data-tip="What today’s usage would cost at public API list prices (rates via LiteLLM). Subscription plans don’t bill per token — this is an equivalent, not your actual bill.">?</span></span></div>
+        <div id="unmatched-models" class="unmatched-note" style="display:none"></div>
         <div class="hero-live hidden" id="hero-live"><span class="pulse"></span><span id="hero-burn">—</span></div>
         <div class="spark"><svg id="spark-svg" viewBox="0 0 340 60"></svg><div class="sparklbl">last 24 hours</div></div>
       </div>
@@ -559,6 +620,12 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
       <div class="flip-note" id="flip-note"></div>
     </div>
 
+    <div class="panel" id="cost-by-model" style="display:none">
+      <h2>Cost by model <span class="help" data-tip="What each model would cost at public API list prices. Codex models are priced from a session total only (no token split), so their figures are estimates.">?</span></h2>
+      <p class="cap">What each model would cost at public API list prices.</p>
+      <div id="cost-by-model-body"></div>
+    </div>
+
     <div id="empty-banner" class="emptybanner hidden">
       <span class="eb-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-15 2 9h6"/></svg></span>
       <div class="eb-tx">
@@ -578,7 +645,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel">
-      <div class="panelhead"><h2>Sub-agents &amp; agent activity <span class="help" data-tip="For each AI task running: which tools it used, code changes it made, and any helper sub-agents it started. Click a row for full detail.">?</span></h2>
+      <div class="panelhead"><h2>Agents — sub-agent activity <span class="help" data-tip="For each AI task running: which tools it used, code changes it made, and any helper sub-agents it started. Click a row for full detail.">?</span></h2>
         <span class="livemeta" id="agents-at"></span></div>
       <p class="cap">Each row is one agent run — click it to expand the full detail. Badges count what it did: ⚙ tool calls · ✎ code edits · ▸ sub-agents it started · ⇄ MCP calls <i>(MCP = external tools like the browser, shell, or files; Task = the agent's to-do list)</i>.</p>
       <div id="agents"><div class="livenote">Checking…</div></div>
@@ -616,7 +683,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel">
-      <h2>Where your tokens go — top projects <span class="help" data-tip="Which folders and projects your tokens went to. Longer bar = more tokens; colors show which tool.">?</span></h2>
+      <h2>Projects — where your tokens go <span class="help" data-tip="Which folders and projects your tokens went to. Longer bar = more tokens; colors show which tool.">?</span></h2>
       <p class="cap">Which working directories / sessions burned the most, by tool.</p>
       <div id="projects"></div>
     </div>
@@ -634,7 +701,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel">
-      <h2>Where you can become more efficient <span class="help" data-tip="Habit changes to use fewer tokens, based on your own heaviest chats and folders.">?</span></h2>
+      <h2>Efficiency — where you can improve <span class="help" data-tip="Habit changes to use fewer tokens, based on your own heaviest chats and folders.">?</span></h2>
       <p class="cap">Habit changes to burn fewer tokens, based on your own heaviest chats and folders. <i>(Background jobs to switch off live in “suggested fixes” below.)</i></p>
       <div class="sugs" id="suggestions"></div>
       <h3 class="subhd">Token breakdown <span class="help" data-tip="Every token split into the four kinds billed separately: input, cache write, cache read, and output. The mix tells you where to cut.">?</span></h3>
@@ -647,7 +714,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
     </div>
 
     <div class="panel" id="waste-panel">
-      <h2>Burning tokens — suggested fixes <span class="help" data-tip="Concrete ways to cut token use: fixes based on your own usage mix, then background jobs on this Mac you can switch off (reversible).">?</span></h2>
+      <h2>Fixes — suggested ways to burn fewer tokens <span class="help" data-tip="Concrete ways to cut token use: fixes based on your own usage mix, then background jobs on this Mac you can switch off (reversible).">?</span></h2>
       <p class="cap"><b>What to change to burn fewer tokens</b> — first tailored to where your tokens actually go, then background jobs to switch off.</p>
       <div id="token-fixes"></div>
       <div id="waste"></div>
@@ -662,7 +729,28 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
         <div class="addrow"><label>Log files</label><input id="src-glob" placeholder="~/.aider/**/*.jsonl   (a path or glob to its JSON logs)"></div>
         <div class="addrow"><label>Token field(s)</label><input id="src-keys" placeholder="total_tokens   —or—   prompt_tokens,completion_tokens"></div>
         <div class="addrow"><label>Timestamp field</label><input id="src-ts" placeholder="optional — e.g. timestamp (else file date is used)"></div>
+        <div class="addrow"><label>Rate — USD per 1M tokens</label><input id="src-rate" type="number" min="0" step="any" placeholder="optional — e.g. 3 (include this tool in the $ cost figures)"></div>
         <div class="addrow"><label>Process name</label><input id="src-proc" placeholder="optional — e.g. aider (shows it live in Running now)"></div>
+        <details class="addhelp">
+          <summary>How do I find these?</summary>
+          <div class="addhelp-body">
+            <p>Point the tracker at the JSON/JSONL files your tool already writes. Two worked examples:</p>
+            <div class="addex">
+              <b>Aider</b>
+              <div class="addex-row"><span>Log files</span><code>~/.aider/**/*.jsonl</code></div>
+              <div class="addex-row"><span>Token field(s)</span><code>prompt_tokens,completion_tokens</code></div>
+              <div class="addex-row"><span>Timestamp field</span><code>timestamp</code> (optional)</div>
+              <div class="addex-row"><span>Rate</span><code>3</code> (optional — USD per 1M tokens, to include it in $)</div>
+            </div>
+            <div class="addex">
+              <b>Gemini CLI</b>
+              <div class="addex-row"><span>Log files</span><code>~/.gemini/tmp/**/*.json</code></div>
+              <div class="addex-row"><span>Token field(s)</span><code>totalTokenCount</code></div>
+              <div class="addex-row"><span>Timestamp field</span><code>createdAt</code> (optional)</div>
+            </div>
+            <p class="addex-tip">Not sure of the field name? Open one of the log files and look for a number next to a key like <code>total_tokens</code>, <code>tokens</code>, <code>usage</code>, or <code>*_token_count</code> — that key is what goes in “Token field(s)”. The tracker searches nested objects, so you don’t need the exact path. Leave <b>Rate</b> blank to skip the $ figure (tokens still count).</p>
+          </div>
+        </details>
         <div class="addbar"><button class="fixbtn" onclick="addSource()">Add tool</button><span class="fixstatus" id="src-status"></span></div>
       </div>
     </div>
@@ -696,9 +784,10 @@ const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 function svgEl(t,a,p){const e=document.createElementNS(SVGNS,t);if(a)for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
 function fmt(n){n=+n||0;
-  if(n>=1e9)return (n/1e9).toFixed(2)+"B";
-  if(n>=1e6)return (n/1e6).toFixed(1).replace(/\.0$/,'')+"M";
-  if(n>=1e3)return (n/1e3).toFixed(1).replace(/\.0$/,'')+"K";
+  if(n>=1e12)return (n/1e12).toFixed(2).replace(/\.?0+$/,'')+"T";
+  if(n>=1e9) return (n/1e9).toFixed(2).replace(/\.?0+$/,'')+"B";
+  if(n>=1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+"M";
+  if(n>=1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'')+"K";
   return String(Math.round(n));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function hlp(tip, cls){ return `<span class="help${cls?(' '+cls):''}" data-tip="${esc(tip)}">?</span>`; }
@@ -1000,7 +1089,8 @@ function render(d){
   const now = new Date();
   try{ $("#hero-date").textContent = now.toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'}); }catch(e){}
   const today = isoLocal(now);
-  const wkStart = new Date(now); wkStart.setDate(now.getDate() - now.getDay()); // Sunday
+  // "This week" = rolling last 7 days (today and the 6 days before it), so it matches /api/data's `week`.
+  const wkStart = new Date(now); wkStart.setDate(now.getDate() - 6);
   const weekStart = isoLocal(wkStart);
   const ym = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
   const yr = String(now.getFullYear());
@@ -1011,7 +1101,20 @@ function render(d){
     if(k.startsWith(ym))pMonth+=v;
     if(k.startsWith(yr))pYear+=v;
   }
-  $("#p-day").textContent=fmt(pDay);
+  // hero number — with friendly fallbacks instead of a lone giant "0"
+  const pDayEl=$("#p-day"), heroNum=pDayEl?pDayEl.closest(".hero-num"):null;
+  if((d.grand||0)<=0){
+    // [15] first-run: no logs at all yet — welcome, don't show a giant 0
+    if(heroNum) heroNum.classList.add("msg");
+    if(pDayEl) pDayEl.innerHTML='No usage yet<span class="sub2">Your Claude Code, Cowork, and Codex activity appears here automatically.</span>';
+  } else if(pDay===0){
+    // [14] history exists but nothing today yet — lead with the week, not a bare 0
+    if(heroNum) heroNum.classList.add("msg");
+    if(pDayEl) pDayEl.innerHTML='No usage yet today<span class="sub2">'+esc(fmt(pWeek))+' tokens this week</span>';
+  } else {
+    if(heroNum) heroNum.classList.remove("msg");
+    if(pDayEl) pDayEl.textContent=fmt(pDay);
+  }
   $("#p-week").textContent=fmt(pWeek);
   $("#p-month").textContent=fmt(pMonth);
   $("#p-year").textContent=fmt(pYear);
@@ -1041,21 +1144,44 @@ function render(d){
   renderProjects(d.byProject||[]);
   renderWhy(d.bySession||[]);
   renderTop10(d.days||[]);
+  // [3] "/compact" is a Claude Code command — hide the "Copy /compact" button for Codex/Cowork-only users.
+  (function(){ const cb=$("#eff-compact"); if(cb) cb.style.display = ((d.byTool && +d.byTool["Claude Code"])>0) ? "" : "none"; })();
   renderInsights(d.insights);
-  renderTokenBreakdown(d.tokenBreakdown);
+  renderTokenBreakdown(d.tokenBreakdown, d);
   renderTokenFixes(d.tokenBreakdown, d.bySession);
   $("#foot").textContent = `Scanned ${d.files} log files. Token counts include input, output and cache tokens. All read locally; your prompts and chats never leave your Mac.`;
+  if(typeof wireHelpChips==='function') wireHelpChips();   // make any newly-injected help chips keyboard/tap accessible
 }
 
 // ---- cost / $ layer ----
-function renderCostFlip(bd){
+function renderCostFlip(c){
   const el=$("#cost-flip"); if(!el) return;
-  bd=bd||{};
+  if(!c){ el.style.display="none"; return; }
+  const bd=c.tokenBreakdown||{};
   const kinds=["input","cache_write","cache_read","output"];
   let tokTot=0, costTot=0; const tokV=[], costV=[];
-  kinds.forEach(k=>{ const o=bd[k]||{}; const t=+o.tokens||0, c=+o.usd||0; tokV.push(t); costV.push(c); tokTot+=t; costTot+=c; });
-  if(tokTot<=0 || costTot<=0){ el.style.display="none"; return; } el.style.display="";
+  kinds.forEach(k=>{ const o=bd[k]||{}; const t=+o.tokens||0, cc=+o.usd||0; tokV.push(t); costV.push(cc); tokTot+=t; costTot+=cc; });
   const seg=(arr,tot)=>arr.map((v,i)=>`<span class="kd${i}" style="width:${(v/tot*100).toFixed(2)}%"></span>`).join("");
+  if(tokTot<=0 || costTot<=0){
+    // [8] The 4-way split needs per-kind token data (Codex reports only totals). Rather than
+    // vanish, fall back to a by-tool cost split so the panel always explains itself.
+    const bt=Object.entries(c.byTool||{}).filter(x=>(+x[1]||0)>0).sort((a,b)=>b[1]-a[1]);
+    const total=bt.reduce((s,x)=>s+(+x[1]||0),0);
+    if(!bt.length || total<=0){ el.style.display="none"; return; }
+    el.style.display="";
+    const segs=bt.map(x=>{ const cl=(typeof COLOR!=="undefined"&&COLOR[x[0]])||"#999"; return `<span style="width:${(x[1]/total*100).toFixed(2)}%;background:${cl}" title="${esc(x[0])}: ${usd(x[1])}"></span>`; }).join("");
+    const leg=bt.map(x=>{ const cl=(typeof COLOR!=="undefined"&&COLOR[x[0]])||"#999"; return `<span><span class="dot" style="background:${cl}"></span>${esc(x[0])} · ${usd(x[1])}</span>`; }).join("");
+    $("#flip-tok").innerHTML=`<span style="width:100%;background:var(--rule)"></span>`;
+    $("#flip-cost").innerHTML=segs;
+    document.querySelector('#cost-flip .flip-leg').innerHTML=leg;
+    document.querySelectorAll('#cost-flip .flip-row .fl-lab')[0].textContent="";
+    $("#flip-note").innerHTML=`<b>By tool.</b> The four-token-kind split (input / cache / output) needs per-kind data, which Codex doesn’t report — so this shows the API-list-price cost by tool instead.`;
+    return;
+  }
+  el.style.display="";
+  // restore the static "Tokens" label + four-kind legend (in case a prior render used the by-tool fallback)
+  document.querySelectorAll('#cost-flip .flip-row .fl-lab')[0].textContent="Tokens";
+  document.querySelector('#cost-flip .flip-leg').innerHTML=`<span><span class="dot kd0"></span>Input</span><span><span class="dot kd1"></span>Cache write</span><span><span class="dot kd2"></span>Cache read</span><span><span class="dot kd3"></span>Output</span>`;
   $("#flip-tok").innerHTML=seg(tokV,tokTot);
   $("#flip-cost").innerHTML=seg(costV,costTot);
   const crTok=tokV[2]/tokTot*100, crCost=costV[2]/costTot*100;
@@ -1068,7 +1194,8 @@ async function loadCosts(){
   const byDay = c.byDay || [];
   const now = new Date();
   const today = isoLocal(now);
-  const wk = new Date(now); wk.setDate(now.getDate() - now.getDay()); const weekStart = isoLocal(wk);
+  // rolling last 7 days, to match /api/data's `week` and the hero "This week"
+  const wk = new Date(now); wk.setDate(now.getDate() - 6); const weekStart = isoLocal(wk);
   const ym = `${now.getFullYear()}-${pad(now.getMonth()+1)}`, yr = String(now.getFullYear());
   let cDay=0,cWeek=0,cMonth=0,cYear=0,cAll=0;
   byDay.forEach(row=>{ const d0=row[0], v=+row[1]||0; cAll+=v;
@@ -1077,17 +1204,62 @@ async function loadCosts(){
     if(String(d0).startsWith(ym))cMonth+=v;
     if(String(d0).startsWith(yr))cYear+=v; });
   BLENDED_RATE = (c.blendedRate!=null && c.blendedRate>0) ? c.blendedRate : 0;
+  window.__lastCosts = c;
   const hasCost = cAll>0 && BLENDED_RATE>0;
   document.body.classList.toggle("no-cost", !hasCost);
   const hc=$("#hero-cost"); if(hc) hc.style.display = hasCost ? "" : "none";
-  const set=(id,v)=>{ const el=$(id); if(el) el.textContent = hasCost ? usd(v) : ""; };
+  // [6] Codex/total-only models are approximate — explained in the hero tooltip, not shown as a glyph.
+  const isApprox = Array.isArray(c.byModel) && c.byModel.some(m=>m && m.approx);
+  const pfx = "";
+  const set=(id,v)=>{ const el=$(id); if(el) el.textContent = hasCost ? (pfx+usd(v)) : ""; };
   set("#p-day-cost",cDay); set("#c-week",cWeek); set("#c-month",cMonth); set("#c-year",cYear); set("#c-all",cAll);
-  renderCostFlip(hasCost ? c.tokenBreakdown : null);
+  (function(){ const chip=document.querySelector('#hero-cost .help'); if(!chip) return;
+    const base="What today’s usage would cost at public API list prices (rates via LiteLLM). Subscription plans don’t bill per token — this is an equivalent, not your actual bill.";
+    const tip = isApprox ? (base+" Codex reports only a session total, so its share is priced at the input rate — approximate.") : base;
+    chip.setAttribute('data-tip', tip); chip.setAttribute('aria-label', tip); })();
+  renderCostFlip(hasCost ? c : null);
+  renderUnmatchedModels(c.unmatchedModels||[]);
+  renderCostByModel(hasCost ? (c.byModel||[]) : []);
+  if(typeof wireHelpChips==='function') wireHelpChips();
   if(window.__lastLive) renderLive(window.__lastLive);   // refresh $/hr now BLENDED_RATE is set
+}
+// [9.1] name the models that couldn't be priced (excluded from the $ but counted in tokens).
+function renderUnmatchedModels(list){
+  const el=$("#unmatched-models"); if(!el) return;
+  list=(list||[]).filter(Boolean);
+  if(!list.length){ el.style.display="none"; el.innerHTML=""; return; }
+  const shown=list.slice(0,6).map(m=>`<code>${esc(String(m))}</code>`).join(" ");
+  const more=list.length>6 ? ` +${list.length-6} more` : "";
+  const n=list.length;
+  el.innerHTML=`<b>${n} model${n===1?"":"s"} couldn’t be priced</b> and ${n===1?"isn’t":"aren’t"} in this $: ${shown}${more}. Their tokens still count in the totals above. Add a rate in “Tracked tools” to include them.`;
+  el.style.display="";
+}
+// [10] compact per-model cost table (model · tokens · $ · approx marker).
+function renderCostByModel(list){
+  const wrap=$("#cost-by-model"), body=$("#cost-by-model-body");
+  if(!wrap||!body) return;
+  list=(list||[]).filter(x=>x && (+x.usd>0 || +x.tokens>0));
+  if(!list.length){ wrap.style.display="none"; body.innerHTML=""; return; }
+  const rows=list.slice(0,15).map(m=>{
+    const nm=esc(String(m.model||"?"));
+    return `<div class="cbm-row"><span class="cbm-nm" title="${nm}">${nm}</span><span class="cbm-tok">${fmt(m.tokens||0)} tok</span><span class="cbm-usd">${usd(m.usd||0)}</span></div>`;
+  }).join("");
+  body.innerHTML=rows;
+  wrap.style.display="";
 }
 
 // ---- calendar ----
-function calLevel(t){ if(t<1)return 0; if(t<1e6)return 1; if(t<1e7)return 2; if(t<5e7)return 3; return 4; }
+// [13] Heat is scaled to THIS month's own busiest day (quartile thresholds), so a heavy month still
+// shows a gradient instead of every cell maxing out. `mx` is the month's max per-day total.
+function calLevel(t, mx){
+  if(t<1) return 0;
+  if(!mx || mx<=0) return 1;
+  const r=t/mx;
+  if(r<=0.25) return 1;
+  if(r<=0.50) return 2;
+  if(r<=0.75) return 3;
+  return 4;
+}
 function renderCalendar(){
   $("#cal-title").textContent = `${MONTHS[calM]} ${calY}`;
   const grid = $("#cal"); grid.innerHTML="";
@@ -1095,12 +1267,15 @@ function renderCalendar(){
   const startDow = new Date(calY,calM,1).getDay();
   const dim = new Date(calY,calM+1,0).getDate();
   const today = isoLocal(new Date());
+  // month max (across days that have data) drives the relative heat scale
+  let monthMax=0;
+  for(let dd=1;dd<=dim;dd++){ const ds=`${calY}-${pad(calM+1)}-${pad(dd)}`; const tt=(DAYS[ds]&&DAYS[ds].total)||0; if(tt>monthMax) monthMax=tt; }
   for(let i=0;i<startDow;i++){const e=document.createElement("div");e.className="cell empty";grid.appendChild(e);}
   let monthTotal=0;
   for(let dd=1;dd<=dim;dd++){
     const ds = `${calY}-${pad(calM+1)}-${pad(dd)}`;
     const tot = (DAYS[ds]&&DAYS[ds].total)||0; monthTotal+=tot;
-    const lvl = calLevel(tot);
+    const lvl = calLevel(tot, monthMax);
     const cell = document.createElement("div");
     const isToday = ds===today;
     cell.className = "cell heat"+lvl+(isToday?" today":"")+(ds>today?" future":"");
@@ -1280,13 +1455,20 @@ function renderTop10(days){
 }
 
 // ---- token breakdown + data-driven fixes ----
-function copyFixCmd(btn,text){ try{ navigator.clipboard.writeText(text); const o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(()=>{btn.textContent=o;},1500);}catch(e){ btn.textContent="Copy failed"; } }
+// [18] show a brief, always-visible + screen-reader-announced confirmation on copy
+let __toastT=null;
+function copyToast(msg){
+  const el=$("#copy-toast"); if(!el) return;
+  el.textContent=msg||"Copied ✓"; el.classList.add("show");
+  clearTimeout(__toastT); __toastT=setTimeout(()=>el.classList.remove("show"), 1800);
+}
+function copyFixCmd(btn,text){ try{ navigator.clipboard.writeText(text); const o=btn.textContent; btn.textContent="Copied ✓"; copyToast("Copied ✓"); setTimeout(()=>{btn.textContent=o;},1500);}catch(e){ btn.textContent="Copy failed"; copyToast("Couldn’t copy"); } }
 function copyAttr(btn){
   const t=btn.getAttribute('data-copy')||'';
   try{ navigator.clipboard.writeText(t); const o=btn.getAttribute('data-label')||btn.textContent;
-    btn.setAttribute('data-label',o); btn.textContent="Copied ✓"; btn.classList.add('ok');
+    btn.setAttribute('data-label',o); btn.textContent="Copied ✓"; btn.classList.add('ok'); copyToast("Copied ✓");
     setTimeout(()=>{btn.textContent=o;btn.classList.remove('ok');},1600);
-  }catch(e){ btn.textContent="Copy failed"; }
+  }catch(e){ btn.textContent="Copy failed"; copyToast("Couldn’t copy"); }
 }
 function shortDate(iso){
   if(!iso) return "";
@@ -1360,9 +1542,9 @@ function renderTokenFixes(bd, sessions){
   }
   el.innerHTML = `<div style="display:flex;flex-direction:column;gap:9px;margin-bottom:8px">${cards.slice(0,3).join("")}</div>`;
 }
-function renderTokenBreakdown(bd){
+function renderTokenBreakdown(bd, d){
   const el=$("#token-breakdown"); if(!el) return;
-  bd=bd||{};
+  bd=bd||{}; d=d||{};
   const cats=[
     {k:"input",       label:"Input",       tip:"New tokens you sent — typed prompts and pasted content — that weren't already cached."},
     {k:"cache_read",  label:"Cache read",  tip:"Previously-saved context being re-sent to the model on this turn. Grows with longer threads."},
@@ -1371,6 +1553,16 @@ function renderTokenBreakdown(bd){
   ];
   const total = cats.reduce((s,c)=>s+(+bd[c.k]||0),0);
   if(total<=0){
+    // [7] The 4-way split can be 0 while the user still has tokens (Codex reports only a lump-sum
+    // per session). Show the REAL total honestly instead of "nothing was tracked" — never invent a split.
+    const grand = +d.grand||0;
+    const codex = (d.byTool && +d.byTool.Codex) || 0;
+    if(grand>0 || codex>0){
+      const totalTok = codex>0 ? codex : grand;
+      const src = codex>0 ? "Codex" : "This tool";
+      el.innerHTML = `<div class="tbtip"><span class="tbtag">Note</span><div>${esc(src)} reports one lump-sum total per session, so the input / cache-read / cache-write / output split isn’t available. <b>Total ${esc(src)} tokens: ${fmt(totalTok)}.</b></div></div>`;
+      return;
+    }
     el.innerHTML = '<div class="livenote">No token usage parsed yet — the breakdown fills in once your logs have data.</div>';
     return;
   }
@@ -1383,9 +1575,12 @@ function renderTokenBreakdown(bd){
   }).join("");
   const top = cats.reduce((a,c)=> (+bd[c.k]||0) > (+bd[a.k]||0) ? c : a, cats[0]);
   const topPct = total>0 ? ((+bd[top.k]||0)/total*100) : 0;
+  const hasCC = (d.byTool && +d.byTool["Claude Code"]) > 0;   // [3] only suggest /compact to Claude Code users
   let tip;
   if(top.k==="cache_read" && topPct>=30){
-    tip = "Most of your tokens are cached context being re-read — shorten threads or run /compact so you stop re-sending the same history every turn.";
+    tip = hasCC
+      ? "Most of your tokens are cached context being re-read — shorten threads or run /compact so you stop re-sending the same history every turn."
+      : "Most of your tokens are cached context being re-read — start a fresh thread (carry a short handoff note over) so you stop re-sending the same history every turn.";
   } else if(top.k==="output" && topPct>=40){
     tip = "Output tokens dominate — ask for terser answers, smaller diffs, or “just the change” instead of full re-explanations.";
   } else if(top.k==="input" && topPct>=40){
@@ -1403,8 +1598,8 @@ function renderTokenBreakdown(bd){
 (function(){
   const cb=$("#eff-compact"), sb=$("#eff-scroll-waste"), st=$("#eff-status");
   if(cb) cb.addEventListener("click", async ()=>{
-    try{ await navigator.clipboard.writeText("/compact"); if(st){ st.className="fixstatus ok"; st.textContent="Copied ✓"; setTimeout(()=>{ if(st.textContent==="Copied ✓") st.textContent=""; },1800); } }
-    catch(e){ if(st){ st.className="fixstatus err"; st.textContent="Couldn't copy — select and copy manually."; } }
+    try{ await navigator.clipboard.writeText("/compact"); copyToast("Copied /compact ✓"); if(st){ st.className="fixstatus ok"; st.textContent="Copied ✓"; setTimeout(()=>{ if(st.textContent==="Copied ✓") st.textContent=""; },1800); } }
+    catch(e){ if(st){ st.className="fixstatus err"; st.textContent="Couldn't copy — select and copy manually."; } copyToast("Couldn’t copy"); }
   });
   if(sb) sb.addEventListener("click", ()=>{ scrollToEl($("#waste-panel"), 'start'); });
 })();
@@ -1589,10 +1784,10 @@ function renderSources(d){
 }
 async function addSource(){
   const st=$("#src-status"); st.className="fixstatus"; st.textContent="Saving…";
-  const body={name:$("#src-name").value, glob:$("#src-glob").value, tokenKeys:$("#src-keys").value, tsKeys:$("#src-ts").value, process:$("#src-proc").value, token:FIX_TOKEN};
+  const body={name:$("#src-name").value, glob:$("#src-glob").value, tokenKeys:$("#src-keys").value, tsKeys:$("#src-ts").value, rate:$("#src-rate").value, process:$("#src-proc").value, token:FIX_TOKEN};
   try{
     const r=await fetch("/api/add_source",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json());
-    if(r.ok){ st.className="fixstatus ok"; st.textContent="✓ "+(r.message||"Added."); ["src-name","src-glob","src-keys","src-ts","src-proc"].forEach(id=>$("#"+id).value=""); setTimeout(load,1400); }
+    if(r.ok){ st.className="fixstatus ok"; st.textContent="✓ "+(r.message||"Added."); ["src-name","src-glob","src-keys","src-ts","src-rate","src-proc"].forEach(id=>$("#"+id).value=""); setTimeout(load,1400); }
     else { st.className="fixstatus err"; st.textContent="✗ "+(r.error||"Failed."); }
   }catch(e){ st.className="fixstatus err"; st.textContent="✗ Couldn't reach the tracker server."; }
 }
@@ -1639,8 +1834,12 @@ $("#refresh").addEventListener("click",async()=>{
     if(u && u.outdated) showUpdateModal(u);
   }catch(e){}
 });
-// suppress hover tooltips while scrolling
-(function(){ let t; addEventListener('scroll', ()=>{ document.body.classList.add('is-scrolling'); clearTimeout(t); t=setTimeout(()=>document.body.classList.remove('is-scrolling'), 220); }, {passive:true}); })();
+// help "?" chips: keyboard + tap accessible. Making each focusable means Tab reaches it and a tap
+// focuses it, and :focus-visible reveals the tip (see CSS) — so mouse, keyboard, and touch all work.
+function wireHelpChips(){ document.querySelectorAll('.help').forEach(h=>{ if(h.tabIndex!==0){ h.tabIndex=0; h.setAttribute('role','img'); if(!h.hasAttribute('aria-label')) h.setAttribute('aria-label', h.getAttribute('data-tip')||'help'); } }); }
+wireHelpChips();
+// re-wire after dynamic renders (some help chips are injected by render functions)
+document.addEventListener('DOMContentLoaded', wireHelpChips);
 // theme switcher (Light / Dark / Soft), saved per person
 (function(){
   const ts=document.getElementById('theme-switch'); if(!ts) return;
@@ -1698,17 +1897,53 @@ $("#refresh").addEventListener("click",async()=>{
   apiJSON('/api/widget').then(s=>{ st=s; render(); }).catch(()=>{});
 })();
 // sidebar smooth-scroll nav
+let NAV_SUPPRESS_UNTIL = 0;   // brief window after a click where the scroll-spy defers to the click
 (function(){
   const sb=document.querySelector('.sidebar'); if(!sb) return;
   sb.addEventListener('click', e=>{
     const a=e.target.closest('.nav'); if(!a) return; e.preventDefault();
     sb.querySelectorAll('.nav').forEach(n=>n.classList.remove('on')); a.classList.add('on');
+    NAV_SUPPRESS_UNTIL = Date.now()+700;   // let the smooth-scroll settle before the spy takes over
     const k=a.dataset.go;
     if(k==='overview'){ window.scrollTo({top:0,behavior:'smooth'}); return; }
     const h=[...document.querySelectorAll('.panel h2')].find(x=>x.textContent.includes(k));
     const target = h ? (h.closest('.panel') || h) : null;
     if(target) scrollToEl(target);
   });
+})();
+// [12] scroll-spy: keep the highlighted nav item honest as you scroll (IntersectionObserver).
+(function(){
+  const sb=document.querySelector('.sidebar'); if(!sb || !('IntersectionObserver' in window)) return;
+  const navs=[...sb.querySelectorAll('.nav')];
+  // map each nav item to its section panel (same substring match the click handler uses)
+  function targetFor(nav){
+    const k=nav.dataset.go; if(k==='overview') return null;   // overview = top of page
+    const h=[...document.querySelectorAll('.panel h2')].find(x=>x.textContent.includes(k));
+    return h ? h.closest('.panel') : null;
+  }
+  const setOn=nav=>{ if(!nav) return; navs.forEach(n=>n.classList.toggle('on', n===nav)); };
+  function build(){
+    const pairs=navs.map(n=>({nav:n, el:targetFor(n)})).filter(p=>p.el);
+    const overviewNav=navs.find(n=>n.dataset.go==='overview');
+    if(!pairs.length) return;
+    const io=new IntersectionObserver(()=>{
+      if(Date.now()<NAV_SUPPRESS_UNTIL) return;
+      if(window.scrollY<120){ setOn(overviewNav||pairs[0].nav); return; }   // near the top → Overview
+      // pick the section whose top is closest to (just below) the viewport top
+      let best=null, bestTop=Infinity; const mark=140;
+      pairs.forEach(p=>{ const t=p.el.getBoundingClientRect().top;
+        if(t-mark<=0 && (mark-t)<bestTop){ bestTop=mark-t; best=p.nav; } });
+      if(!best){ // nothing scrolled past yet → first visible section
+        const vis=pairs.find(p=>p.el.getBoundingClientRect().bottom>mark);
+        best = vis ? vis.nav : (overviewNav||pairs[0].nav);
+      }
+      setOn(best);
+    }, {threshold:[0,0.01,0.25,0.5,1], rootMargin:'-120px 0px -55% 0px'});
+    pairs.forEach(p=>io.observe(p.el));
+  }
+  // panels are populated by render(); wait until the dash is visible, then build once.
+  const boot=setInterval(()=>{ if(!document.getElementById('dash').classList.contains('hidden')){ clearInterval(boot); build(); } }, 400);
+  setTimeout(()=>clearInterval(boot), 20000);
 })();
 // customize layout — show / hide / reorder sections, saved per person
 (function(){
@@ -1749,6 +1984,22 @@ $("#refresh").addEventListener("click",async()=>{
     else if(e.target.closest('.ldown')&&i<o.length-1){ [o[i+1],o[i]]=[o[i],o[i+1]]; }
     else return;
     save(); apply(); renderList(); });
+})();
+// narrow-window drawer toggle (≤940px). Opens the existing sidebar; closes on scrim, Escape,
+// or after any control inside it is used (so tapping a nav item both scrolls and closes).
+(function(){
+  const ham=document.getElementById('mob-ham'), scrim=document.getElementById('nav-scrim'), sb=document.getElementById('the-sidebar');
+  if(!ham||!sb) return;
+  const open=()=>{ document.body.classList.add('nav-open'); ham.setAttribute('aria-expanded','true'); };
+  const close=()=>{ document.body.classList.remove('nav-open'); ham.setAttribute('aria-expanded','false'); };
+  const toggle=()=>{ document.body.classList.contains('nav-open') ? close() : open(); };
+  ham.addEventListener('click', toggle);
+  if(scrim) scrim.addEventListener('click', close);
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && document.body.classList.contains('nav-open')) close(); });
+  // close after using a control in the drawer (nav link, theme, accent, customize, add-widget)
+  sb.addEventListener('click', e=>{
+    if(e.target.closest('.nav, .customizebtn, .widgetbtn, .themeswitch button, .accentpick .asw, .accentpick .psw')) close();
+  });
 })();
 load();
 pollLive(); pollAgents();
