@@ -1654,7 +1654,27 @@ function renderLive(d){
   idle.innerHTML = idleHtml;
   if(d.insights) renderInsights(d.insights);
 }
-async function pollLive(){ try{ renderLive(await apiJSON("/api/live")); }catch(e){} }
+// leftovers: the redesign expects d.leftovers {count, freedMB}, but that shape only existed in the
+// demo data — the real backend serves a list at /api/leftovers. Poll it (throttled to ~30s; it runs
+// `ps` server-side) and synthesize the shape so the "Quit idle leftovers" bar appears on live data.
+let __loLast = 0, __loCache = null;
+async function pollLeftovers(){
+  if(Date.now() - __loLast < 30000) return __loCache;
+  __loLast = Date.now();
+  try{
+    const j = await apiJSON("/api/leftovers");
+    const l = (j && j.leftovers) || [];
+    __loCache = l.length ? {count: l.length, freedMB: Math.round(l.reduce((a,x)=>a+(+x.rssMB||0),0))} : null;
+  }catch(e){}
+  return __loCache;
+}
+async function pollLive(){
+  try{
+    const d = await apiJSON("/api/live");
+    d.leftovers = await pollLeftovers();
+    renderLive(d);
+  }catch(e){}
+}
 
 // ---- sub-agents & agent activity ----
 function agoShort(s){ s=+s||0; return s<60?s+"s":(s<3600?Math.round(s/60)+"m":Math.round(s/3600)+"h"); }
@@ -1808,7 +1828,7 @@ async function quitLeftovers(btn){
   try{
     const r = await fetch("/api/kill_leftovers",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({token:FIX_TOKEN})}).then(r=>r.json());
-    if(r.ok){ status.className="fixstatus ok"; status.textContent=`✓ Quit ${r.count} process${r.count===1?'':'es'} · freed ~${r.freedMB} MB.`; setTimeout(pollLive, 800); }
+    if(r.ok){ status.className="fixstatus ok"; status.textContent=`✓ Quit ${r.count} process${r.count===1?'':'es'} · freed ~${r.freedMB} MB.`; __loLast=0; __loCache=null; setTimeout(pollLive, 800); }
     else { status.className="fixstatus err"; status.textContent="✗ "+(r.error||"Failed."); btn.disabled=false; }
   }catch(e){ status.className="fixstatus err"; status.textContent="✗ Couldn't reach the tracker server."; btn.disabled=false; }
 }
