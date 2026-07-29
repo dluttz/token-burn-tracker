@@ -51,6 +51,19 @@
   .widgetnote{margin:6px 6px 0;padding:9px 11px;font-size:11px;line-height:1.55;color:var(--muted);background:rgba(var(--accent-rgb),.05);border:1px solid rgba(var(--accent-rgb),.18);border-radius:9px}
   .widgetnote a{color:var(--accent);font-weight:600;text-decoration:none}
   .widgetnote a:hover{text-decoration:underline}
+  /* ---- Prompt Coach ---- */
+  .coach-ta{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:11px 13px;resize:vertical;min-height:84px}
+  .coach-ta:focus{outline:none;border-color:rgba(var(--accent-rgb),.5);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.1)}
+  .coach-score{font-size:12.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:rgba(var(--accent-rgb),.08);color:var(--accent);border:1px solid rgba(var(--accent-rgb),.22)}
+  .coach-lens{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 6px}
+  .coach-card{display:flex;gap:10px;border:1px solid var(--rule);border-left:3px solid var(--rule);border-radius:10px;padding:10px 13px;margin:6px 0;font-size:12.5px;line-height:1.5}
+  .coach-card.sev-crit{border-left-color:var(--accent);background:rgba(var(--accent-rgb),.05)}
+  .coach-card.sev-warn{border-left-color:rgba(var(--accent-rgb),.55)}
+  .coach-card .ct{font-weight:650}
+  .coach-card .cw{color:var(--muted);margin:2px 0}
+  .coach-card .cf{margin-top:2px}
+  .coach-card .cf b{font-weight:650}
+  .coach-foot{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 
   /* ============ layout / header ============ */
   .wrap{max-width:1180px;margin:0 0 0 217px;padding:28px 44px 90px}
@@ -510,6 +523,7 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
   <a class="nav" data-go="Over time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 14l3-4 3 3 4-7"/></svg>Over time</a>
   <a class="nav" data-go="Projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Projects</a>
   <a class="nav" data-go="Efficiency"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>Efficiency</a>
+  <a class="nav" data-go="Prompt Coach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M9 9h6M9 12h4"/></svg>Prompt Coach</a>
   <a class="nav" data-go="Fixes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"/></svg>Fixes</a>
   <a class="nav" data-go="Tracked tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Tools</a>
   <div class="themeswitch" id="theme-switch">
@@ -711,6 +725,18 @@ setInterval(function(){fetch('/api/theme').then(function(r){return r.json();}).t
         <button class="fixbtn" id="eff-scroll-waste" title="Jump to the background jobs and login agents you can switch off.">What to switch off ↓</button>
         <span class="fixstatus" id="eff-status"></span>
       </div>
+    </div>
+
+    <div class="panel" id="coach-panel">
+      <h2>Prompt Coach — tighten a prompt before you send it <span class="help" data-tip="Paste a prompt and get specific, educational suggestions on the four token-efficiency levers: being deliberate, model choice, fresh chats, and cross-tool workflow. Analysis runs on this Mac only — the prompt is never stored or sent anywhere.">?</span></h2>
+      <p class="cap">Vague prompts make tools read everything and answer long. Paste what you're about to send; get it scored on the four levers that cut token burn. <b>Local-only — your prompt never leaves this Mac.</b></p>
+      <textarea id="coach-input" class="coach-ta" rows="4" placeholder="Paste the prompt you're about to send…"></textarea>
+      <div class="effactions">
+        <button class="fixbtn" id="coach-run">Analyze prompt</button>
+        <span class="coach-score" id="coach-score" style="display:none"></span>
+        <span class="fixstatus" id="coach-status"></span>
+      </div>
+      <div id="coach-results"></div>
     </div>
 
     <div class="panel" id="waste-panel">
@@ -1832,6 +1858,43 @@ async function quitLeftovers(btn){
     else { status.className="fixstatus err"; status.textContent="✗ "+(r.error||"Failed."); btn.disabled=false; }
   }catch(e){ status.className="fixstatus err"; status.textContent="✗ Couldn't reach the tracker server."; btn.disabled=false; }
 }
+// ---- Prompt Coach: local analysis of a pasted prompt on the 4 token-efficiency levers ----
+const COACH_LENS = {1:"Lens 1 · Be deliberate about what you ask", 2:"Lens 2 · Which model you use",
+                    3:"Lens 3 · When to start a fresh chat", 4:"Lens 4 · Using tools against each other"};
+async function coachRun(){
+  const ta=$("#coach-input"), btn=$("#coach-run"), st=$("#coach-status"), sc=$("#coach-score"), out=$("#coach-results");
+  const prompt=(ta.value||"").trim();
+  if(!prompt){ st.className="fixstatus err"; st.textContent="Paste a prompt first."; return; }
+  btn.disabled=true; st.className="fixstatus"; st.textContent="Analyzing locally…";
+  try{
+    const r=await fetch("/api/prompt_check",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:FIX_TOKEN, prompt})}).then(r=>r.json());
+    if(!r.ok){ st.className="fixstatus err"; st.textContent="✗ "+(r.error||"Couldn't analyze."); btn.disabled=false; return; }
+    st.textContent="";
+    sc.style.display="inline-block";
+    sc.textContent=`Efficiency score ${r.score}/100 · ~${r.estTokens} tokens`;
+    let html="";
+    for(const lens of [1,2,3,4]){
+      const fs=(r.findings||[]).filter(f=>f.lens===lens);
+      if(!fs.length) continue;
+      html+=`<div class="coach-lens">${esc(COACH_LENS[lens])}</div>`;
+      for(const f of fs){
+        html+=`<div class="coach-card sev-${esc(f.severity)}"><div>`+
+          `<div class="ct">${esc(f.title)}</div>`+
+          `<div class="cw">${esc(f.why)}</div>`+
+          `<div class="cf"><b>Do this:</b> ${esc(f.fix)}</div></div></div>`;
+      }
+    }
+    html+=`<div class="coach-foot"><button class="fixbtn" data-copy="${esc(r.scaffold)}" data-label="Copy tightened template" onclick="copyAttr(this)">Copy tightened template</button>`+
+          `<span class="cap" style="margin:0">Fill the brackets, delete what you don't need, send that instead.</span></div>`;
+    out.innerHTML=html;
+  }catch(e){ st.className="fixstatus err"; st.textContent="✗ Couldn't reach the tracker server."; }
+  btn.disabled=false;
+}
+document.addEventListener("DOMContentLoaded",()=>{
+  const b=$("#coach-run"); if(b) b.addEventListener("click", coachRun);
+  const ta=$("#coach-input"); if(ta) ta.addEventListener("keydown", e=>{ if((e.metaKey||e.ctrlKey)&&e.key==="Enter") coachRun(); });
+});
 async function applyFix(btn){
   const agent = btn.getAttribute("data-agent");
   if(!confirm("Disable “"+agent+"” now and at every future login?\n\nThe file moves to Trash, so it's fully reversible.")) return;

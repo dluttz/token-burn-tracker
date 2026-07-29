@@ -44,3 +44,6 @@ prices_override.json
 
 # Dev preview of the next redesign; promoted into tracker.html at release time
 tracker-redesign.html
+
+# temporary widget-debug copies (never commit)
+_aifeed_debug/

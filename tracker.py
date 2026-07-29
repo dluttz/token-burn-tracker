@@ -2046,6 +2046,149 @@ def cost_data():
             "tokenBreakdown": token_breakdown, "blendedRate": blended_rate,
             "unmatchedModels": unmatched, "loading": STATE["loading"]}
 
+# ---------- Prompt Coach (local prompt analyzer — nothing ever leaves the Mac) ----------
+# Scores a prompt on the four token-efficiency levers and returns educational, specific
+# suggestions. Pure stdlib heuristics: no LLM call, no network, prompt is never stored or
+# sent anywhere (and never appears in analytics — those stay content-free).
+_VAGUE_PAT = re.compile(r"\b(fix it|make it better|improve (this|it)|look into|check everything|"
+                        r"clean (this|it) up|do something|make it work|figure (it|this) out|optimi[sz]e it)\b", re.I)
+_BROAD_PAT = re.compile(r"\b(everything|entire|whole (project|codebase|folder|repo)|all (files|of it|the files)|"
+                        r"every (file|folder)|full (project|repo|codebase))\b", re.I)
+_SCOPE_PAT = re.compile(r"(/[\w.~-]+/|\.[a-z]{2,4}\b|`[^`]+`|\"[^\"]+\"|'[^']+'|\bfunction\b|\bclass\b|"
+                        r"\bline \d|\bsection\b|https?://)", re.I)
+_FORMAT_PAT = re.compile(r"\b(format|json|table|list|bullet|markdown|csv|one (paragraph|line|sentence)|"
+                         r"under \d+|max(imum)? \d+|\d+ (words|lines|sentences|bullets|items)|steps|outline|"
+                         r"short|brief|concise|tl;?dr)\b", re.I)
+_NEG_PAT = re.compile(r"\b(don'?t|do not|avoid|exclude|skip|ignore|without|no need to|leave out|except)\b", re.I)
+_CONT_PAT = re.compile(r"\b(as (we|i) (discussed|said|mentioned)|earlier you|as before|continue (from|where)|"
+                       r"remember (when|what)|like (before|last time)|previous(ly)? (you|we))\b", re.I)
+_LIGHT_TASK = re.compile(r"\b(extract|classif|categori|label|reformat|convert|translate|rename|summari[sz]e|"
+                         r"list (the|all)|count|sort|dedup|proofread|fix typos?|spell)\b", re.I)
+_HEAVY_TASK = re.compile(r"\b(architect|refactor (the|across|this whole)|design a system|security review|"
+                         r"prove|debug.{0,20}(intermittent|flaky|race)|migrat|multi[- ]file|trade-?offs?|"
+                         r"root cause|strategy|from scratch)\b", re.I)
+_SELFCHECK_PAT = re.compile(r"\b(double[- ]check|verify (your|the) (work|answer|output)|are you sure|"
+                            r"review your own)\b", re.I)
+
+def _live_reread_share():
+    """% of all tracked tokens that are cache reads (context being re-sent), from real data."""
+    try:
+        tb = (STATE["data"] or {}).get("tokenBreakdown") or {}
+        tot = sum(tb.values())
+        return round(100.0 * tb.get("cache_read", 0) / tot) if tot else None
+    except Exception:
+        return None
+
+def _model_rate_line():
+    """Live per-1M input rates for the light/medium/heavy tiers, from the price map."""
+    pmap, _src, _ts = prices()
+    out = {}
+    for tier, names in (("light", ("claude-haiku-4-5", "claude-3-5-haiku")),
+                        ("medium", ("claude-sonnet-4-6", "claude-sonnet-4")),
+                        ("heavy", ("claude-opus-4-8", "claude-opus-4-5", "claude-opus-4"))):
+        for n in names:
+            r, k = match_price(n, pmap)
+            if r:
+                out[tier] = {"model": k, "in": round(r[0], 2), "out": round(r[3], 2)}
+                break
+    return out
+
+def analyze_prompt(text):
+    text = (text or "").strip()
+    if not text:
+        return {"ok": False, "error": "empty prompt"}
+    words = len(text.split())
+    est_tokens = max(1, round(len(text) / 4))
+    findings = []
+    def add(lens, sev, title, why, fix):
+        findings.append({"lens": lens, "severity": sev, "title": title, "why": why, "fix": fix})
+
+    # ---- Lens 1 · Be deliberate about what you ask ----
+    if words < 5:
+        add(1, "crit" if not _SCOPE_PAT.search(text) else "warn", "Very short prompt — the model has to guess",
+            "Under-specified asks make the model fill gaps with assumptions, which means wrong answers and re-asks. Retries cost far more than a longer first prompt.",
+            "Say what you want, where to look, and what the result should look like — one clear sentence each.")
+    if _VAGUE_PAT.search(text):
+        add(1, "warn", "Vague instruction (“%s”)" % _VAGUE_PAT.search(text).group(0),
+            "Words like this don't tell the model what “better” means, so it explores broadly — in agentic tools that can mean reading whole folders.",
+            "Name the exact problem and the success condition: “the login button overlaps the nav on mobile — make it match the desktop spacing.”")
+    if _BROAD_PAT.search(text) and not _NEG_PAT.search(text):
+        add(1, "crit", "Unlimited scope (“%s”) with no exclusions" % _BROAD_PAT.search(text).group(0),
+            "“Everything / whole project” invites the tool to read every file it can find. That's the single biggest token explosion in agentic tools.",
+            "Point at the exact files or folders that matter, and say what to skip: “only src/auth/, ignore tests and node_modules.”")
+    if not _SCOPE_PAT.search(text) and words >= 5 and _BROAD_PAT.search(text) is None and any(
+            w in text.lower() for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs")):
+        add(1, "info", "No concrete target named",
+            "Without a named file, folder, function, or link, the tool searches for the target first — and you pay for the search.",
+            "Name the thing: a path, a function, a quoted heading, a URL.")
+    if not _FORMAT_PAT.search(text) and words >= 8:
+        add(1, "warn", "No output size or format specified",
+            "Output tokens are the most expensive kind (about 5× input rate on every Claude tier). Unbounded asks get long answers by default.",
+            "Add one clause: “answer in 5 bullets,” “just the diff,” “one-paragraph summary,” “JSON only.”")
+    qs = text.count("?")
+    if qs >= 4:
+        add(1, "info", "%d questions in one prompt" % qs,
+            "Pile-ups get shallow answers for each question, then follow-ups re-send the whole thread again.",
+            "Number the questions, or better: ask the two that matter now, in order of priority.")
+
+    # ---- Lens 2 · Which model you use ----
+    rates = _model_rate_line()
+    light, heavy = _LIGHT_TASK.search(text), _HEAVY_TASK.search(text)
+    if light and not heavy:
+        lr, hr = rates.get("light"), rates.get("heavy")
+        mult = ""
+        if lr and hr and lr["in"]:
+            mult = " — about %.0f× cheaper per input token than an Opus-class model" % (hr["in"] / lr["in"])
+        add(2, "warn", "This looks like a light task (“%s”)" % light.group(0),
+            "Extraction, classification, reformatting and summarizing don't need a frontier model; small models give equivalent results on these.",
+            ("Run it on a Haiku-class model%s. In Claude Code/Cowork, switch model for this task; save the big model for reasoning." % mult))
+    elif heavy:
+        add(2, "info", "Heavy-reasoning task detected (“%s”)" % heavy.group(0),
+            "Multi-constraint work (architecture, cross-file refactors, security review) is where big models earn their price — a cheap model that gets it wrong costs more in retries.",
+            "Use your strongest model, but scope it tightly (Lens 1) so its expensive tokens go to thinking, not reading.")
+    else:
+        add(2, "info", "Default rule: middle tier first",
+            "A Sonnet-class model handles most day-to-day tasks at a fifth of Opus-class input price; escalate only when it visibly struggles.",
+            "Start medium. Route down for mechanical work, up for genuinely hard reasoning.")
+
+    # ---- Lens 3 · When to start a fresh chat ----
+    rr = _live_reread_share()
+    if _CONT_PAT.search(text):
+        add(3, "warn", "This prompt leans on a long conversation (“%s”)" % _CONT_PAT.search(text).group(0),
+            "Every message re-sends the entire thread. Asking a one-line question at the bottom of a 100k-token chat costs ~100k input tokens — every time.",
+            "If the thread is long, use the dashboard's “Copy handoff prompt” (Fixes) to carry a compact summary into a fresh chat.")
+    if rr is not None and rr >= 70:
+        add(3, "crit" if rr >= 90 else "warn", "Your own data: %d%% of your tokens are re-read context" % rr,
+            "That share of your total burn is chats re-sending their own history rather than new work — the classic long-thread tax.",
+            "Start new chats per task, and hand off with a summary instead of continuing giant threads. One topic, one chat.")
+    else:
+        add(3, "info", "Fresh-chat rule of thumb",
+            "A chat's whole history rides along with every turn. New topic in an old chat = paying for the old topic forever.",
+            "New task → new chat. Continue a thread only when the history itself is what you need.")
+
+    # ---- Lens 4 · Using tools against each other ----
+    if _SELFCHECK_PAT.search(text):
+        add(4, "info", "Asking a model to check its own work",
+            "Models grade their own answers generously. A second tool catches more for the same tokens.",
+            "Paste the answer into a different tool with “find what's wrong with this” — cheap model is fine for critique.")
+    add(4, "info", "Draft cheap, polish expensive",
+        "The biggest cross-tool saving: produce the bulk (draft, boilerplate, extraction) on a cheap model, then spend premium tokens only on judgment and final quality.",
+        "Example: Haiku-class drafts the doc → Opus-class rewrites the two paragraphs that matter. You pay frontier price for 10% of the tokens.")
+
+    # ---- score ----
+    score = 100
+    for f in findings:
+        score -= {"crit": 22, "warn": 10, "info": 2}[f["severity"]]
+    score = max(5, min(100, score))
+    scaffold = ("GOAL: <one sentence — what done looks like>\n"
+                "WHERE: <exact files / folders / links — and what to SKIP>\n"
+                "OUTPUT: <format + length cap, e.g. “5 bullets” or “just the diff”>\n"
+                "MODEL: <cheapest tier that can do this — see suggestion above>\n\n"
+                + text)
+    return {"ok": True, "estTokens": est_tokens, "words": words, "score": score,
+            "findings": findings, "scaffold": scaffold, "rates": rates,
+            "rereadShare": rr}
+
 # ---------- server ----------
 THEME_FILE = os.path.join(DATA_DIR, "theme.json")
 def _is_hex(a):
@@ -2290,7 +2433,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False})); return
             ok = save_theme(body.get("primary"), body.get("accent"))
             self._send(200 if ok else 400, json.dumps(dict({"ok": ok}, **load_theme()))); return
-        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget")
+        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget", "/api/prompt_check")
         if not any(self.path.startswith(x) for x in POSTS):
             self._send(404, json.dumps({"error": "not found"})); return
         # Security: local origin only + per-launch secret that only our served page knows.
@@ -2311,6 +2454,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if self.path.startswith("/api/install_widget"):
             self._send(200, json.dumps(install_widget())); return
+        if self.path.startswith("/api/prompt_check"):
+            # analysis happens in-process; the prompt is not stored, logged, or sent anywhere
+            self._send(200, json.dumps(analyze_prompt(body.get("prompt") or ""))); return
         if self.path.startswith("/api/kill_leftovers"):
             res = kill_leftovers(); _LIVE_CACHE.clear()
             self._send(200, json.dumps(res)); return
