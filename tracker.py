@@ -753,10 +753,10 @@ def agent_meta_for(path):
     return agent_meta().get(m.group(1)) if m else None
 
 def _fresh_session_titles(d):
-    """bySession is baked at scan time, but the app writes/renames chat titles asynchronously —
-    so a chat can get its real sidebar title AFTER we scanned it. Re-resolve from the live
-    metadata index at serve time (the same source the Agents view uses, which is why that view
-    was always right). Cheap: agent_meta() is cached ~8s and this touches ≤30 rows."""
+    """bySession and leaks are baked at scan time, but the app writes/renames chat titles
+    asynchronously — so a chat can get its real sidebar title AFTER we scanned it. Re-resolve from
+    the live metadata index at serve time (the same source the Agents view uses, which is why that
+    view was always right). Cheap: agent_meta() is cached ~8s and this touches a few dozen rows."""
     try:
         for row in (d or {}).get("bySession") or []:
             if len(row) >= 5 and row[4]:
@@ -765,7 +765,96 @@ def _fresh_session_titles(d):
                     row[0] = m["title"]
     except Exception:
         pass
+    try:   # same treatment for Token Leaks, or its titles go stale while bySession's stay fresh
+        for _w in ((d or {}).get("leaks") or {}).values():
+            for c in (_w or {}).get("chats") or []:
+                m = agent_meta_for(c.get("file"))
+                if m and m.get("title"):
+                    c["title"] = m["title"]; c["titleSource"] = "app"
+    except Exception:
+        pass
     return d
+
+# ---------- Token Leaks (v2.4.0) ----------
+# "Re-sent text" is cache_read: the conversation so far, sent again on every single turn. For most
+# people it dwarfs everything they actually typed, and unlike a prompt it is invisible. Everything
+# below is derived from entries already parsed for the dashboard — no extra scanning, no new files.
+# Only sources that report a token split (Claude Code / Cowork) can be measured. Codex and custom
+# sources expose totals only, so their tokens are reported as unmeasured rather than guessed at.
+
+def _pctile(vals, p):
+    """p in 0..1 over an already-sorted list."""
+    if not vals:
+        return 0
+    return vals[min(len(vals) - 1, int(round((len(vals) - 1) * p)))]
+
+def _split_savings(resent, turns, typical_turns):
+    """Re-sent text grows with the SQUARE of turn count — turn N re-sends N turns of history — so
+    splitting a chat into k parts cuts the total to roughly 1/k. k here is how many typical-length
+    chats this one is worth. Capped at 90% so the headline figure can never overpromise."""
+    if resent <= 0 or turns <= 0 or typical_turns <= 0:
+        return 0
+    k = turns / float(typical_turns)
+    if k <= 1:
+        return 0
+    return int(min(resent * 0.90, resent - (resent / k)))
+
+def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, resolve,
+                unmeasured=0, top=8, since=None, window="all"):
+    """One window of the leak board. `since` is an ISO date; a chat belongs to the window if it was
+    last ACTIVE in it. Windowing by activity (not by slicing turns) is what lets the board show
+    improvement: split a monster chat today and it ages out of the 7- and 30-day views, while the
+    shorter chats that replaced it show up small. Without that, a past monster would sit at the top
+    forever and nothing you did would ever look better."""
+    # A chat needs a back-and-forth to leak: a single-turn chat has no history to re-send.
+    keys = [sk for sk in sess_resent
+            if sess_turns.get(sk, 0) >= 2 and (not since or (sess_date.get(sk) or "") >= since)]
+    empty = {"window": window, "since": since, "typical": 0, "typicalTurns": 0, "chats": [],
+             "startup": [], "measured": 0, "totalResent": 0, "topShare": 0,
+             "gauge": {"p75": 0, "p90": 0}, "unmeasuredTokens": unmeasured}
+    if not keys:
+        return empty
+    resents = sorted(sess_resent[sk] for sk in keys)
+    typical = _pctile(resents, 0.5)                              # the "1x" the UI keys off
+    typical_turns = max(1, _pctile(sorted(sess_turns[sk] for sk in keys), 0.5))
+    chats = []
+    today = datetime.date.today().isoformat()
+    for sk in sorted(keys, key=lambda k: -sess_resent[k])[:top]:
+        r, n = sess_resent[sk], sess_turns[sk]
+        title, proj, tool, fpath, date, when, src = resolve(sk)
+        # titleSource tells the UI whether this is the app's own sidebar name or our sanitized
+        # first-message fallback. Only Cowork chats carry app titles; Claude Code and Codex have
+        # no equivalent, so those rows should be labelled by tool + project + date, never by
+        # dumping raw prompt text that the user cannot match to anything.
+        chats.append({"title": title, "titleSource": src, "project": proj, "tool": tool,
+                      "file": fpath, "date": date, "when": when, "lastActive": date,
+                      "active": bool(date) and date >= today,
+                      "resent": r, "turns": n,
+                      "multiple": round(r / float(typical), 1) if typical else None,
+                      "saves": _split_savings(r, n, typical_turns)})
+    # Entry fee: what a chat costs before the first word — the tool's own instructions, CLAUDE.md,
+    # and one description per connected tool. Median (not mean) so a single big opening read can't
+    # skew it, and only for projects with enough chats to be fair.
+    byproj = defaultdict(list)
+    for sk in keys:
+        s0 = sess_startup.get(sk)
+        if s0:
+            byproj[sess_proj.get(sk, "(unknown)")].append(s0)
+    startup = []
+    for pj, vals in byproj.items():
+        if len(vals) < 3:
+            continue
+        vals.sort()
+        med = _pctile(vals, 0.5)
+        startup.append({"project": pj, "median": med, "chats": len(vals), "paid": med * len(vals)})
+    startup.sort(key=lambda x: -x["paid"])
+    total = sum(resents)
+    return {"window": window, "since": since,
+            "typical": typical, "typicalTurns": typical_turns, "chats": chats,
+            "startup": startup[:8], "measured": len(keys), "totalResent": total,
+            "topShare": round(100.0 * sum(c["resent"] for c in chats[:5]) / total, 1) if total else 0,
+            "gauge": {"p75": _pctile(resents, 0.75), "p90": _pctile(resents, 0.90)},
+            "unmeasuredTokens": unmeasured}
 
 def aggregate(entries, titles):
     day = defaultdict(lambda: defaultdict(int))
@@ -778,6 +867,11 @@ def aggregate(entries, titles):
     tool = defaultdict(int)
     sess = defaultdict(int)
     sess_meta = {}
+    sess_turns = defaultdict(int)    # assistant turns that reported a token split
+    sess_resent = defaultdict(int)   # cache_read per session = the conversation re-sent
+    sess_startup = {}                # that session's FIRST turn: the entry fee before you type
+    sess_proj = {}
+    unmeasured = 0                   # tokens from sources with no split (Codex / custom)
     sess_file = {}   # session key -> first source .jsonl path seen for it (for transcript links)
     sess_paths = defaultdict(set)   # session key -> ALL transcript files, so the real title resolves even if the first file misses
     sess_date = {}   # session key -> latest activity date (to find the chat in the app's date-grouped list)
@@ -812,8 +906,14 @@ def aggregate(entries, titles):
         if split:
             for i in range(4):
                 um[i] += split[i]; udm[i] += split[i]; utm[i] += split[i]
+            sess_turns[sk] += 1
+            sess_resent[sk] += split[2]
+            if sk not in sess_startup:          # entries arrive in file order, so this is turn 1
+                sess_startup[sk] = split[1] or split[0]
+            sess_proj.setdefault(sk, sp)
         else:   # tools that only expose totals (Codex, custom sources)
             um[4] += tk; udm[4] += tk; utm[4] += tk
+            unmeasured += tk
         grand += tk
     today = datetime.date.today().isoformat()
     weekago = (datetime.date.today() - datetime.timedelta(days=6)).isoformat()
@@ -825,8 +925,8 @@ def aggregate(entries, titles):
                      "topProjects": [[p, v] for p, v in tp]})
     byProject = [[p, v, dict(proj_tool[p])] for p, v in sorted(proj.items(), key=lambda x: -x[1])[:25]]
     byModel = sorted(model.items(), key=lambda x: -x[1])[:12]
-    bySession = []
-    for sk, v in sorted(sess.items(), key=lambda x: -x[1])[:30]:
+    def _resolve(sk):
+        """Real chat title + start time for one session key. Shared by bySession and Token Leaks."""
         tl, sp = sess_meta.get(sk, ("?", "?"))
         fp = sess_file.get(sk, "")
         meta = agent_meta_for(fp)   # real sidebar title + start time from the app's own per-chat metadata (Cowork)
@@ -836,6 +936,7 @@ def aggregate(entries, titles):
                 if m and m.get("title"):
                     meta = m
                     break
+        src = "app" if (meta and meta.get("title")) else "firstMessage"
         title = (meta and meta.get("title")) or titles.get(sk) or sp or "(session)"
         when = ""
         if meta and meta.get("created"):   # authoritative chat-start time (epoch ms) — stable, never bumps on reopen
@@ -851,11 +952,26 @@ def aggregate(entries, titles):
                 when = datetime.datetime.fromtimestamp(ts0).isoformat(timespec="minutes")
             except Exception:
                 when = ""
-        bySession.append([title, sp, tl, v, fp, sess_date.get(sk, ""), when])
+        return title, sp, tl, fp, sess_date.get(sk, ""), when, src
+
+    bySession = []
+    for sk, v in sorted(sess.items(), key=lambda x: -x[1])[:30]:
+        title, sp, tl, fp, dt, when, _src = _resolve(sk)
+        bySession.append([title, sp, tl, v, fp, dt, when])
+    try:
+        _t = datetime.date.today()
+        leaks = {}
+        for _w, _days in (("7", 7), ("30", 30), ("all", None)):
+            _since = (_t - datetime.timedelta(days=_days - 1)).isoformat() if _days else None
+            leaks[_w] = build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date,
+                                    _resolve, unmeasured, since=_since, window=_w)
+    except Exception:
+        leaks = None   # a leaks failure must never take the dashboard down
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
             "grand": grand, "today": day_total.get(today, 0), "week": week,
             "byTool": dict(tool), "days": days, "byProject": byProject,
             "byModel": byModel, "bySession": bySession, "projectPaths": proj_path,
+            "leaks": leaks,
             "usageMatrix": {"byModel": {k: list(v) for k, v in usage_model.items()},
                             "byDayModel": {d_: {m: list(v) for m, v in mm.items()} for d_, mm in usage_day_model.items()},
                             "byToolModel": {t_: {m: list(v) for m, v in mm.items()} for t_, mm in usage_tool_model.items()}}}
@@ -2372,6 +2488,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps(widget_status()))
         elif self.path.startswith("/api/costs"):
             self._send(200, json.dumps(cost_data()))
+        elif self.path.startswith("/api/leaks"):
+            from urllib.parse import urlparse, parse_qs
+            win = (parse_qs(urlparse(self.path).query).get("days", ["30"])[0])
+            d = _fresh_session_titles(STATE["data"] or {})   # live titles, same as /api/summary
+            all_w = d.get("leaks") or {}
+            if win not in all_w:
+                win = "30" if "30" in all_w else (next(iter(all_w), "all"))
+            self._send(200, json.dumps({"leaks": all_w.get(win), "window": win,
+                                        "available": sorted(all_w.keys()),
+                                        "loading": STATE["loading"]}))
         elif self.path.startswith("/widget.jsx"):
             # Plain-download fallback (no Übersicht detected, or user prefers manual):
             # a ready-to-use single-file widget — drop it into Übersicht's widgets folder.
