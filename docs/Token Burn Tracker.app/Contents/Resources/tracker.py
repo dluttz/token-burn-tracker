@@ -2362,19 +2362,19 @@ def analyze_prompt(text):
     core = " ".join(text.split())
     adds = []
     if _BROAD_PAT.search(text) and not _NEG_PAT.search(text):
-        adds.append("Skip: <what it should not read, e.g. tests, node_modules, docs>")
+        adds.append("Skip anything not needed to answer: tests, generated files, dependency folders, and files you have already read in this session.")
     elif not _SCOPE_PAT.search(text) and any(
             w in text.lower() for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs")):
-        adds.append("Where to look: <the exact files, folders or links — delete this line if it already has them open>")
+        adds.append("Read only the files you need, tell me which ones you read, and ask before reading a whole folder.")
     if _is_revision(text) and not _SCOPE_PAT.search(text):
-        adds.append("Only change: <quote the exact snippet — and return only that section>")
+        adds.append("Return only the changed section, not the whole thing.")
     if not _FORMAT_PAT.search(text) and words >= 8:
-        adds.append("Answer as: <a size or format, e.g. 5 bullets, just the diff, one paragraph>")
+        adds.append("Keep the answer short: a list or the diff, no preamble.")
     if _RESEARCHY_PAT.search(text) and not _ESCAPE_PAT.search(text):
         adds.append("If you are not sure, say so — do not invent sources.")
     if (words >= 12 and _BUILD_PAT.search(text) and not _DONE_PAT.search(text)
             and not _FORMAT_PAT.search(text)):
-        adds.append("Done when: <the check you will apply>")
+        adds.append("End by listing what you did in one line each, so I can check it against what I asked.")
     scaffold = core + (("\n\n" + "\n".join(adds)) if adds else "")
     return {"ok": True, "estTokens": est_tokens, "words": words, "score": score,
             "findings": findings, "scaffold": scaffold, "scaffoldHasAdds": bool(adds),

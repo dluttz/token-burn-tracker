@@ -715,34 +715,37 @@ function buildActions(){
     });
   }
 
-  /* --- live: a running chat that is mostly re-reading itself ------------- */
+  /* --- live: every running chat that is mostly re-reading itself --------- */
   const running=(live.running||[]).slice().sort((a,b)=>(+b.burnMin||0)-(+a.burnMin||0));
-  const top=running[0];
   const rereadPct=bd.pct("cache_read");
-  if(top && (+top.burnMin||0)>0 && rereadPct>=40){
-    const perMin=Math.round(top.burnMin*rereadPct/100);
-    const tfile=chatFileFor(top.title);
-    const dispatch=!!(tfile && tfile.indexOf("/local_ditto_")>=0);
-    const targetHTML=`<div style="font-size:14px;margin-top:var(--s1)">Paste it into: <b style="color:var(--accent)">“${esc(clip(top.title,80))}”</b>`+
-      (dispatch?` <span class="muted">(this looks like the app&#39;s built-in Dispatch chat, so it may not sit in your normal sidebar list)</span>`:``)+`</div>`;
-    out.push({
-      id:"compact-live", group:"now", live:true, tag:"Running now", src:"Live",
-      title:"The busiest chat running now is mostly re-reading itself",
-      what:`“${clip(top.title,72)}” re-sends its whole history with every turn, so most of what it burns is text it has already sent.`,
-      usage:`It is burning ${fmt(top.burnMin)} tokens a minute, and ${Math.round(rereadPct)}% of everything this Mac has measured is cache reads.`,
-      result:"Carrying the thread into a fresh chat resets the re-reading to nothing. The old transcript stays on disk.",
-      save:null,
-      perMinLabel:`about ${fmt(perMin)}/min, estimated`, perMinRank:perMin,
-      estBasis:`Estimated from this session at ${fmt(top.burnMin)}/min and your measured ${Math.round(rereadPct)}% cache-read share.`,
-      cta:"Copy the compact prompt", doneLab:"Copied", targetHTML,
-      confirm:{stops:"The re-reading, once you paste the note into a new chat.",
-               survives:"The full transcript on disk, and everything the chat has already produced.",
-               extra:"We cannot compact another app's chat from here, so this copies a prompt for you to paste."},
-      run:async()=>{
-        const ok=await copyText(HANDOFF,"Copied the compact prompt");
-        return ok ? {ok:true, message:"Copied.", next:`Paste it into “${clip(top.title,60)}”, then open a new chat with the note it hands back.`}
-                  : {ok:false, message:"Could not reach the clipboard.", next:"Open Fixes and copy the prompt from there."};
-      }
+  if(rereadPct>=40){
+    running.filter(x=>(+x.burnMin||0)>0).slice(0,3).forEach((sess,si)=>{
+      const perMin=Math.round(sess.burnMin*rereadPct/100);
+      const tfile=chatFileFor(sess.title);
+      const dispatch=!!(tfile && tfile.indexOf("/local_ditto_")>=0);
+      const targetHTML=`<div style="font-size:14px;margin-top:var(--s1)">Paste it into: <b style="color:var(--accent)">“${esc(clip(sess.title,80))}”</b>`+
+        (dispatch?` <span class="muted">(this looks like the app&#39;s built-in Dispatch chat, so it may not sit in your normal sidebar list)</span>`:``)+`</div>`;
+      out.push({
+        id:"compact-live-"+String(sess.title||si).replace(/[^a-zA-Z0-9]+/g,"").slice(0,28),
+        group:"now", live:true, tag:"Running now", src:"Live",
+        title: si===0 ? "The busiest chat running now is mostly re-reading itself"
+                      : `“${clip(sess.title,52)}” is also mostly re-reading itself`,
+        what:`“${clip(sess.title,72)}” re-sends its whole history with every turn, so most of what it burns is text it has already sent.`,
+        usage:`It is burning ${fmt(sess.burnMin)} tokens a minute, and ${Math.round(rereadPct)}% of everything this Mac has measured is cache reads.`,
+        result:"Carrying the thread into a fresh chat resets the re-reading to nothing. The old transcript stays on disk.",
+        save:null,
+        perMinLabel:`about ${fmt(perMin)}/min, estimated`, perMinRank:perMin,
+        estBasis:`Estimated from this session at ${fmt(sess.burnMin)}/min and your measured ${Math.round(rereadPct)}% cache-read share.`,
+        cta:"Copy the compact prompt", doneLab:"Copied", targetHTML,
+        confirm:{stops:"The re-reading, once you paste the note into a new chat.",
+                 survives:"The full transcript on disk, and everything the chat has already produced.",
+                 extra:"We cannot compact another app's chat from here, so this copies a prompt for you to paste."},
+        run:async()=>{
+          const ok=await copyText(HANDOFF,"Copied the compact prompt");
+          return ok ? {ok:true, message:"Copied.", next:`Paste it into “${clip(sess.title,60)}”, then open a new chat with the note it hands back.`}
+                    : {ok:false, message:"Could not reach the clipboard.", next:"Open Fixes and copy the prompt from there."};
+        }
+      });
     });
   }
 
