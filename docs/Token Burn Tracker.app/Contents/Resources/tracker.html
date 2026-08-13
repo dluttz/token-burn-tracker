@@ -271,6 +271,7 @@ html[data-theme="soft"] .card{border:none;box-shadow:var(--shadow-sm)}
   <a class="tab" href="#today" data-view="today">Today</a>
   <a class="tab" href="#where" data-view="where">Where it went</a>
   <a class="tab" href="#fixes" data-view="fixes">Fixes</a>
+  <a class="tab" href="#coach" data-view="coach">Check a prompt</a>
   <a class="tab" href="#settings" data-view="settings">Settings</a>
   <span class="navright">
     <span class="demopill" id="demo-pill" hidden>Sample data, tracker not connected</span>
@@ -283,6 +284,7 @@ html[data-theme="soft"] .card{border:none;box-shadow:var(--shadow-sm)}
   <section class="view" id="view-today"></section>
   <section class="view" id="view-where"></section>
   <section class="view" id="view-fixes"></section>
+  <section class="view" id="view-coach"></section>
   <section class="view" id="view-settings"></section>
 </main>
 
@@ -803,6 +805,7 @@ function buildActions(){
       out.push({
         id:"habit-output", group:(outPct>=25?"worth":"minor"), live:false, tag:"Habit", src:"Efficiency",
         title:"You ask for whole files where a diff would do",
+        link:{view:"coach", label:"Check your next prompt first"},
         what:"Output is the most expensive kind of token, and a regenerated file is mostly text you already had.",
         usage:`Output is ${pctStr(outPct)} of your tokens`+(tCost>0?` and ${pctStr(oCost/tCost*100)} of the list-price equivalent.`:"."),
         result:"Say “just the change” and you get a patch instead of a rewrite: the same edit for a fraction of the output.",
@@ -818,6 +821,7 @@ function buildActions(){
       out.push({
         id:"habit-input", group:(inPct>=25?"worth":"minor"), live:false, tag:"Habit", src:"Efficiency",
         title:"Big pasted prompts are driving your usage",
+        link:{view:"coach", label:"Check your next prompt first"},
         what:"Pasted files are counted in full every time. Naming the path instead lets the tool read only what it needs.",
         usage:`Fresh input is ${pctStr(inPct)} of your tokens, ${fmt(bd.input)} in all.`,
         result:"Reference files by path and name the two or three that matter, instead of pasting them whole.",
@@ -1558,6 +1562,7 @@ function fixRowHTML(a){
         ${S.open["rev-"+a.id]?`<div class="muted" style="margin-top:var(--s2);font-size:12.5px;white-space:pre-wrap">${esc(a.reveal.text)}</div>`:""}</div>`:""}
       <div style="display:flex;align-items:center;gap:var(--s3);margin-top:var(--s3);flex-wrap:wrap">
         ${(a.cta&&(a.run||!a.reveal))?ctaHTML(a):""}
+        ${a.link?`<a class="btn btn-ghost btn-sm" data-act="setview" data-v="${attr(a.link.view)}" href="#${attr(a.link.view)}">${esc(a.link.label)} &rarr;</a>`:""}
         <span style="margin-left:auto">${rowToolsHTML(a)}</span>
       </div>
       ${S.asking[a.id]?confirmHTML(a):""}
@@ -1572,26 +1577,12 @@ function renderFixes(){
     ? `${now.length?`${now.length} thing${now.length>1?"s":""} can be done from this page right now, and ${now.length>1?"they are":"it is"} first. `:""}Below that, the ones that need a change of habit, then the ones we think are not worth your time, said plainly rather than hidden.`
     : "Nothing to fix. Nothing is running unattended, and no habit in your measured usage is far enough out of line to be worth changing.";
 
-  const coach = `<hr class="hr" style="margin:var(--s8) 0 var(--s4)">
-    <div style="display:flex;align-items:baseline;gap:var(--s3);cursor:pointer;flex-wrap:wrap;row-gap:var(--s1)" data-act="toggle" data-k="coach">
-      <span class="muted" style="font-size:11px;width:12px">${S.open.coach?"▾":"▸"}</span>
-      <span style="font-size:15px">Check a prompt before you send it</span>
-      <span class="muted" style="font-size:12.5px">Vague prompts make tools read everything and answer long. This runs on this Mac; the prompt is not stored or sent anywhere.</span>
-    </div>
-    ${S.open.coach?`<div style="margin-top:var(--s3);max-width:72ch">
-      <textarea class="input" id="coach-input" rows="4" placeholder="Paste the prompt you are about to send…"></textarea>
-      <div style="display:flex;align-items:center;gap:var(--s3);margin-top:var(--s2);flex-wrap:wrap">
-        <button class="btn btn-primary" data-act="coachrun" ${S.coachBusy?"disabled":""}>${S.coachBusy?"Reading it…":"Read it back to me"}</button>
-        ${S.coach&&S.coach.ok?`<span class="tag tag-outline num">Score ${esc(S.coach.score)} of 100 · about ${esc(nfmt(S.coach.estTokens))} tokens</span>`:""}
-        ${S.coach&&!S.coach.ok?`<span class="muted" style="font-size:13px">${esc(srv(S.coach.error||"Could not read it."))}</span>`:""}
-      </div>
-      ${(S.coach&&S.coach.ok)?`<div style="margin-top:var(--s3);display:flex;flex-direction:column;gap:var(--s2)">
-        ${(S.coach.findings||[]).map(f=>`<p style="margin:0;font-size:13.5px;border-left:1px solid ${f.severity==="crit"?"var(--accent)":"var(--rule)"};padding-left:var(--s3)">
-          <b>${esc(srv(f.title))}</b> ${esc(srv(f.why))} <span class="muted">${esc(srv(f.fix))}</span></p>`).join("")}
-        ${(S.coach.findings||[]).length?"":`<p class="muted" style="margin:0;font-size:13.5px">Nothing to tighten. Send it.</p>`}
-        ${S.coach.scaffold?`<div><button class="btn btn-secondary btn-sm" data-act="copy" data-copy="${attr(S.coach.scaffold)}">Copy a tightened template</button></div>`:""}
-      </div>`:""}
-    </div>`:""}`;
+  const coach = `<div class="card elev-sm" style="margin-top:var(--s8);padding:var(--s4);gap:var(--s2);background:var(--surface);border-left:3px solid var(--accent)">
+    <div class="card-kicker">The easiest fix on this page</div>
+    <div class="card-title" style="font-size:20px">Check a prompt before you send it</div>
+    <p style="margin:0;font-size:14px;max-width:64ch">Paste the prompt, one click, and it says what will burn before you spend anything. Vague prompts are the habit behind most of the leaks above. It runs on this Mac; the prompt is not stored or sent anywhere.</p>
+    <div><a class="btn btn-primary" data-act="setview" data-v="coach" href="#coach">Check a prompt now</a></div>
+  </div>`;
 
   $("#view-fixes").innerHTML =
     `<h6 class="muted">Ranked by what it gives back</h6>
@@ -1613,6 +1604,37 @@ function renderFixes(){
         ${S.open.trivial?`<div class="rowlist" style="margin-top:var(--s3)">${minor.map(fixRowHTML).join("")}</div>`:""}
       </div>`:""}
      ${coach}`;
+}
+
+/* ===========================================================================
+   CHECK A PROMPT — built for the laziest possible path: the box is focused on
+   arrival, Cmd+Enter runs it, and the result leads with what to copy.
+   ======================================================================== */
+function renderCoach(){
+  const c=S.coach;
+  const results = (c&&c.ok) ? `<div style="margin-top:var(--s4);display:flex;flex-direction:column;gap:var(--s2);max-width:76ch">
+      <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">
+        <span class="tag tag-outline num" style="font-size:13px">Score ${esc(c.score)} of 100</span>
+        <span class="muted num" style="font-size:13px">about ${esc(nfmt(c.estTokens))} tokens as written</span>
+      </div>
+      ${(c.findings||[]).map(f=>`<p style="margin:0;font-size:14px;border-left:${f.severity==="crit"?"3px solid var(--accent)":"1px solid var(--rule)"};padding-left:var(--s3)">
+        <b>${esc(srv(f.title))}</b> ${esc(srv(f.why))}<br><span class="muted">${esc(srv(f.fix))}</span></p>`).join("")}
+      ${(c.findings||[]).length?"":`<p style="margin:0;font-size:14px;border-left:1px solid var(--rule);padding-left:var(--s3)">Nothing to tighten. Send it as it is.</p>`}
+      ${c.scaffold?`<div style="margin-top:var(--s1)"><button class="btn btn-primary" data-act="copy" data-copy="${attr(c.scaffold)}">Copy the tightened version</button>
+        <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">Fill the brackets, delete what you do not need, send that instead.</span></div>`:""}
+    </div>` : (c&&!c.ok ? `<p class="muted" style="margin-top:var(--s3);font-size:13.5px">${esc(srv(c.error||"Could not read it."))}</p>` : "");
+  $("#view-coach").innerHTML =
+    `<h6 class="muted">Before you spend the tokens</h6>
+     <h1 style="margin:var(--s3) 0 0">Check a prompt</h1>
+     <p style="max-width:64ch;margin:var(--s3) 0 var(--s6);font-size:16px">Paste what you are about to send. One click and it says what will make the tool read everything and answer long, before it costs anything. It runs on this Mac; the prompt is not stored or sent anywhere.</p>
+     <div style="max-width:76ch">
+       <textarea class="input" id="coach-input" rows="7" style="font-size:15px" placeholder="Paste the prompt you are about to send…"></textarea>
+       <div style="display:flex;align-items:center;gap:var(--s3);margin-top:var(--s3);flex-wrap:wrap">
+         <button class="btn btn-primary" data-act="coachrun" ${S.coachBusy?"disabled":""} style="font-size:15px;padding:var(--s2) var(--s4)">${S.coachBusy?"Reading it…":"Read it back to me"}</button>
+         <span class="muted" style="font-size:12.5px">or press Cmd+Enter</span>
+       </div>
+       ${results}
+     </div>`;
 }
 
 /* ===========================================================================
@@ -1721,7 +1743,7 @@ function renderSettings(){
    Rendering, routing, events, polling
    ======================================================================== */
 S.form = {};
-const VIEWS=["today","where","fixes","settings"];
+const VIEWS=["today","where","fixes","coach","settings"];
 function viewEl(v){ return document.getElementById("view-"+v); }
 function typingIn(v){
   const el=viewEl(v), a=document.activeElement;
@@ -1745,10 +1767,11 @@ function render(only){
   renderChrome();
   const v=only||S.view;
   if(only && only!==S.view) return;
-  if(typingIn(v) && (v==="settings"||v==="fixes")) return;
+  if(typingIn(v) && (v==="settings"||v==="fixes"||v==="coach")) return;
   if(v==="today") renderToday(), wireChart();
   else if(v==="where") renderWhere();
   else if(v==="fixes") renderFixes(), restoreForm();
+  else if(v==="coach") renderCoach(), restoreForm();
   else if(v==="settings") renderSettings(), restoreForm();
 }
 function renderIfVisible(v){ if(S.view===v) render(v); }
@@ -1776,6 +1799,7 @@ function setView(v){
   if(VIEWS.indexOf(v)<0) v="today";
   S.view=v;
   if(v==="where") loadLeaks();   // titles re-resolve server-side, so renames land on open
+  if(v==="coach") setTimeout(()=>{ const t=$("#coach-input"); if(t) t.focus(); }, 60);
   if(location.hash.slice(1)!==v){ try{ history.replaceState(null,"","#"+v); }catch(e){ location.hash=v; } }
   render();
   window.scrollTo({top:0,behavior:"auto"});
@@ -1844,6 +1868,9 @@ document.addEventListener("change", e=>{
   else if(act==="setaccent"){ setAccent(v); }
   else if(act==="setaccentcustom"){ setAccent(el.value); }
 });
+document.addEventListener("keydown", e=>{
+  if((e.metaKey||e.ctrlKey) && e.key==="Enter" && e.target && e.target.id==="coach-input") doCoach();
+});
 document.addEventListener("input", e=>{
   const el=e.target;
   if(el.id) S.form[el.id]=el.value;
@@ -1909,7 +1936,7 @@ async function doWidget(){
   render();
 }
 async function doCoach(){
-  const prompt=(S.form["coach-input"]||"").trim();
+  const prompt=(S.form["coach-input"]||($("#coach-input")&&$("#coach-input").value)||"").trim();
   if(!prompt){ S.coach={ok:false, error:"Paste a prompt first."}; render(); return; }
   S.coachBusy=true; render();
   try{ S.coach=await apiPOST("/api/prompt_check",{prompt}); }
