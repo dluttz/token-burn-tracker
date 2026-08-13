@@ -1178,25 +1178,23 @@ function renderToday(){
 /* ===========================================================================
    WHERE IT WENT
    ======================================================================== */
-/* Only Cowork chats carry a name the user chose. For everything else the API
-   hands back the opening message, which is raw prompt text and useless as a
-   heading, so we build a label out of facts instead. */
+/* The heading is the exact chat title, as the app shows it. Cowork titles are
+   the app's own sidebar names, re-resolved on every fetch, so a rename in the
+   app shows here too. Claude Code and Codex chats have no user-set name, so
+   their heading is the chat's own summary or opening request: still the exact
+   text you would recognise the chat by, never a label we invented. */
 function chatLabel(c){
-  if(c.titleSource==="app" && c.title) return String(c.title);
-  const when=String(c.when||c.date||"").slice(0,10);
-  const parts=[c.project||"(unknown folder)", c.tool||"?"];
-  if(when){ const p=when.split("-"); if(p.length===3) parts.push(`${MON[(+p[1])-1]} ${+p[2]}`); }
-  if(+c.turns>0) parts.push(`${nfmt(c.turns)} messages`);
-  return parts.join(" · ");
+  const t=String(c.title||"").replace(/\s+/g," ").trim();
+  return t || (c.project||"(untitled chat)");
 }
 function chatSub(c){
-  if(c.titleSource==="app"){
-    const bits=[c.tool?`${c.tool} chat`:"", c.project||"", shortDate(c.when||c.date)].filter(Boolean);
-    return bits.join(" · ");
-  }
-  const t=String(c.title||"").replace(/\s+/g," ").trim();
-  if(!t) return "";
-  return "started with: “"+(t.length>96?t.slice(0,96)+"…":t)+"”";
+  const parts=[];
+  if(c.tool) parts.push(c.tool+" chat");
+  if(c.project && c.project!=="Cowork sessions") parts.push(c.project);
+  const when=String(c.when||c.date||"").slice(0,10);
+  if(when){ const p=when.split("-"); if(p.length===3) parts.push(`${MON[(+p[1])-1]} ${+p[2]}`); }
+  if(c.titleSource!=="app") parts.push("no app title, this is its opening request");
+  return parts.join(" · ");
 }
 function leaksNow(){ return (S.leaks && S.leaks.leaks) || null; }
 
@@ -1234,9 +1232,10 @@ function cutChatsHTML(){
   const rows=lk.chats.map((c,i)=>{
     const id="leak-"+i;
     const label=chatLabel(c), sub=chatSub(c);
+    const short=clip(label,110);
     const link=c.file
-      ? `<a class="linky" href="/transcript?file=${encodeURIComponent(c.file)}" target="_blank" rel="noopener" title="Open this chat's transcript">${esc(label)} &#8599;</a>`
-      : `<span title="${attr(label)}">${esc(label)}</span>`;
+      ? `<a class="linky" href="/transcript?file=${encodeURIComponent(c.file)}" target="_blank" rel="noopener" title="${attr(label)} — open this chat's transcript">${esc(short)} &#8599;</a>`
+      : `<span title="${attr(label)}">${esc(short)}</span>`;
     const asking=S.asking[id], ran=S.ran[id];
     let action;
     if(ran) action=ran.ok?`<span class="tag tag-accent">Copied</span>`:`<span class="tag tag-quiet">Not copied</span>`;
@@ -1268,7 +1267,7 @@ function cutChatsHTML(){
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Only Cowork chats carry a name you chose; the rest are labelled by folder, tool, date and message count, with the opening request underneath. Every title links to the real transcript.</p>
+    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript.</p>
     ${codexNote}`;
 }
 
@@ -1718,6 +1717,7 @@ function wireChart(){
 function setView(v){
   if(VIEWS.indexOf(v)<0) v="today";
   S.view=v;
+  if(v==="where") loadLeaks();   // titles re-resolve server-side, so renames land on open
   if(location.hash.slice(1)!==v){ try{ history.replaceState(null,"","#"+v); }catch(e){ location.hash=v; } }
   render();
   window.scrollTo({top:0,behavior:"auto"});

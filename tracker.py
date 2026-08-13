@@ -727,17 +727,17 @@ def load_agent_meta():
     idx = {}
     base = HOME + "/Library/Application Support/Claude/local-agent-mode-sessions"
     for mp in glob.glob(base + "/**/local_*.json", recursive=True):
-        m = re.search(r"(local_[0-9a-fA-F-]+)\.json$", mp)
-        if not m:
-            continue
+        # Key by the filename stem. A hex-only pattern here missed named sessions
+        # like local_ditto_<uuid>.json, so their real sidebar titles never resolved.
+        name = os.path.basename(mp)[:-5]
         try:
             d = json.load(open(mp, errors="ignore"))
         except Exception:
             continue
         if not isinstance(d, dict):
             continue
-        idx[m.group(1)] = {"title": (d.get("title") or "").strip(),
-                           "created": d.get("createdAt"), "last": d.get("lastActivityAt")}
+        idx[name] = {"title": (d.get("title") or "").strip(),
+                     "created": d.get("createdAt"), "last": d.get("lastActivityAt")}
     return idx
 def agent_meta():
     now = time.time()
@@ -749,8 +749,15 @@ def agent_meta():
         _AGENT_META["ts"] = now
     return _AGENT_META["idx"]
 def agent_meta_for(path):
-    m = re.search(r"(local_[0-9a-fA-F-]+)", path or "")
-    return agent_meta().get(m.group(1)) if m else None
+    # A chat's transcript lives inside a folder named exactly like its metadata
+    # JSON's stem (…/local_<id>/…/audit.jsonl beside local_<id>.json), so match
+    # whole path segments, innermost first. The old hex-only regex extracted the
+    # bogus key "local_d" from local_ditto_<uuid> paths and the lookup missed.
+    idx = agent_meta()
+    for seg in reversed((path or "").split("/")):
+        if seg.startswith("local_") and seg in idx:
+            return idx[seg]
+    return None
 
 def _fresh_session_titles(d):
     """bySession and leaks are baked at scan time, but the app writes/renames chat titles
