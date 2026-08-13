@@ -722,22 +722,42 @@ def shorten(p):
 # The desktop app stores a per-chat metadata file (local_<uuid>.json) with the exact title it shows in
 # its sidebar, plus createdAt/lastActivityAt. Reading it lets flagged chats show their real name + true
 # start time — matched to a session by the local_<uuid> in its transcript path.
-_AGENT_META = {"idx": {}, "ts": 0.0}
+_AGENT_META = {"idx": {}, "files": {}, "ts": 0.0}
 def load_agent_meta():
+    """Refresh the title index. The glob still walks the tree, but a per-file
+    mtime cache means unchanged metadata files are not re-read — in steady
+    state that is ~100 stat calls instead of ~100 JSON parses every refresh.
+    A rename rewrites its local_<id>.json, so the mtime bump catches it."""
     idx = {}
+    files = _AGENT_META["files"]
+    seen = set()
     base = HOME + "/Library/Application Support/Claude/local-agent-mode-sessions"
     for mp in glob.glob(base + "/**/local_*.json", recursive=True):
         # Key by the filename stem. A hex-only pattern here missed named sessions
         # like local_ditto_<uuid>.json, so their real sidebar titles never resolved.
         name = os.path.basename(mp)[:-5]
+        seen.add(name)
+        try:
+            mt = os.stat(mp).st_mtime
+        except OSError:
+            continue
+        cached = files.get(name)
+        if cached and cached[0] == mt:
+            idx[name] = cached[1]
+            continue
         try:
             d = json.load(open(mp, errors="ignore"))
         except Exception:
             continue
         if not isinstance(d, dict):
             continue
-        idx[name] = {"title": (d.get("title") or "").strip(),
-                     "created": d.get("createdAt"), "last": d.get("lastActivityAt")}
+        entry = {"title": (d.get("title") or "").strip(),
+                 "created": d.get("createdAt"), "last": d.get("lastActivityAt")}
+        files[name] = (mt, entry)
+        idx[name] = entry
+    for k in list(files):        # forget sessions whose metadata file is gone
+        if k not in seen:
+            files.pop(k, None)
     return idx
 def agent_meta():
     now = time.time()
@@ -2090,6 +2110,27 @@ def _parse_litellm(raw):
         out.setdefault(key, rates)
     return out
 
+def refresh_prices_now():
+    """Fetch the price sheet NOW and say what happened — unlike the lazy
+    background refresh, which is fail-silent by design."""
+    if not PRICES_ON:
+        return {"ok": False, "error": "Price fetching is switched off (TOKENBURN_PRICES=off)."}
+    try:
+        req = urllib.request.Request(PRICES_URL, headers={"User-Agent": "TokenBurnTracker"})
+        raw = json.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8", "replace"))
+        pm = _parse_litellm(raw)
+        if not pm:
+            return {"ok": False, "error": "The price sheet came back empty or unreadable."}
+        with _PRICES_LOCK:
+            _PRICES["map"], _PRICES["ts"], _PRICES["source"] = pm, time.time(), "litellm"
+        try:
+            json.dump({"ts": _PRICES["ts"], "map": pm}, open(PRICES_FILE, "w"))
+        except Exception:
+            pass
+        return {"ok": True, "message": "Refreshed: %d models priced." % len(pm)}
+    except Exception as e:
+        return {"ok": False, "error": (type(e).__name__ + ": " + str(e))[:160]}
+
 def _refresh_prices_bg():
     def _run():
         try:
@@ -2634,7 +2675,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False})); return
             ok = save_theme(body.get("primary"), body.get("accent"))
             self._send(200 if ok else 400, json.dumps(dict({"ok": ok}, **load_theme()))); return
-        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget", "/api/prompt_check", "/api/trash_folder")
+        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget", "/api/prompt_check", "/api/trash_folder", "/api/refresh_prices")
         if not any(self.path.startswith(x) for x in POSTS):
             self._send(404, json.dumps({"error": "not found"})); return
         # Security: local origin only + per-launch secret that only our served page knows.
@@ -2658,6 +2699,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/api/prompt_check"):
             # analysis happens in-process; the prompt is not stored, logged, or sent anywhere
             self._send(200, json.dumps(analyze_prompt(body.get("prompt") or ""))); return
+        if self.path.startswith("/api/refresh_prices"):
+            self._send(200, json.dumps(refresh_prices_now())); return
         if self.path.startswith("/api/trash_folder"):
             res = trash_folder(body); _LIVE_CACHE.clear()
             self._send(200, json.dumps(res)); return

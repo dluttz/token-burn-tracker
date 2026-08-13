@@ -361,7 +361,7 @@ function nfmt(n){ return (+n||0).toLocaleString("en-US"); }
 
 /* ---------- in-memory state ---------- */
 const S = {
-  view:"today", span:"live", cut:"chats", leakWin:"30",
+  view:"today", span:"day", spanAuto:true, cut:"chats", leakWin:"30", ledger:[],
   data:null, live:null, costs:null, leaks:null, leftovers:null, agents:null,
   series:{}, widget:null, update:null,
   cap:null,                     // tokens per rolling window, entered by the user
@@ -665,7 +665,7 @@ function chartSeries(){
     const v=S.liveSamples.slice(-LIVE_SAMPLES_MAX);
     const full=v.length>=LIVE_SAMPLES_MAX;
     return {vals:v, left: full ? "6 min ago" : "page opened", stepMs:8000,
-            empty: v.length<2 ? "Collecting. One reading every eight seconds." : null};
+            empty: v.length<2 ? "Collecting. One reading every eight seconds. The 24-hour view is already full." : null};
   }
   const s=S.series["1d"], b=(s&&s.buckets)||[];
   return {vals:b.map(x=>Object.keys(x.tools||{}).reduce((a,k)=>a+(+x.tools[k]||0),0)/60),
@@ -1000,7 +1000,7 @@ function chartHTML(){
   const sustain = ci.ready&&ci.cap>0 ? ci.cap/(WINDOW_HOURS*60) : 0;
   const W=940, H=150;
   const spans=[["live","Last 6 min"],["day","Last 24 h"]].map(r=>
-    `<label class="seg-opt"><input type="radio" name="tbspan" ${S.span===r[0]?"checked":""} data-act="setspan" data-v="${r[0]}">${r[1]}</label>`).join("");
+    `<label class="seg-opt" data-act="pinspan"><input type="radio" name="tbspan" ${S.span===r[0]?"checked":""} data-act="setspan" data-v="${r[0]}">${r[1]}</label>`).join("");
 
   let body;
   if(cs.empty){
@@ -1123,6 +1123,24 @@ function reclaimHTML(acts){
   }).join("")}</div>`;
 }
 
+function ledgerHTML(){
+  if(!S.ledger.length) return "";
+  const now=burnPerMin();
+  const rows=S.ledger.slice(-8).reverse().map(e=>{
+    let when=""; try{ when=new Date(e.t).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}); }catch(x){}
+    const delta=(e.burnThen>0)?`<span class="muted num" style="flex:none;font-size:12px">burn then ${esc(fmt(e.burnThen))}/min · now ${esc(fmt(now))}/min</span>`:"";
+    return `<div class="r" style="display:flex;align-items:baseline;gap:var(--s3);padding:var(--s2) 0;flex-wrap:wrap;row-gap:var(--s1)">
+      <span class="muted num" style="flex:none;font-size:12px;width:64px">${esc(when)}</span>
+      <span style="flex:1;min-width:220px;font-size:14px">${esc(clip(e.label,90))}<span class="muted" style="font-size:12.5px"> · ${esc(e.msg)}</span></span>
+      ${delta}
+    </div>`;
+  }).join("");
+  return `<div style="display:flex;align-items:baseline;gap:var(--s3);margin:var(--s8) 0 var(--s2);flex-wrap:wrap;row-gap:var(--s1)">
+      <h4 style="margin:0">Done while this page was open</h4>
+      <span class="muted" style="font-size:12.5px">What each fix reported, and the burn reading before it against now. Burn moves for other reasons too; this is the reading, not a promise of cause.</span>
+    </div><div class="rowlist">${rows}</div>`;
+}
+
 function standingHTML(acts){
   const hero=acts.filter(a=>a.group==="worth")[0];
   const more=acts.filter(a=>a.group!=="now").length;
@@ -1219,7 +1237,7 @@ function renderToday(){
   const acts=buildActions();
   const el=$("#view-today");
   el.innerHTML = heroHTML() + (hasHistory()
-    ? (`<div id="chartbox">${chartHTML()}</div>` + figsHTML() + reclaimHTML(acts) + standingHTML(acts) + sessionsHTML())
+    ? (`<div id="chartbox">${chartHTML()}</div>` + figsHTML() + reclaimHTML(acts) + ledgerHTML() + standingHTML(acts) + sessionsHTML())
     : sessionsHTML());
 }
 </script>
@@ -1466,6 +1484,23 @@ function cutDaysHTML(){
         ? `${Object.keys(pick.byTool).map(k=>`${k} ${fmt(pick.byTool[k])}`).join(" · ")}${(pick.top||[]).length?` · mostly ${pick.top[0][0]}`:""}`
         : "nothing ran that day")
     : "Click a day to read it out. Deeper tint is a heavier day; today is outlined.";
+  let dayChats="";
+  if(pick && pick.total>0){
+    const rows=((S.data&&S.data.bySession)||[]).filter(r=>r&&r[5]===S.pickDay).slice(0,6).map(r=>{
+      const label=clip(String(r[0]||"(untitled)"),86);
+      const link=r[4]?`<a class="linky" href="/transcript?file=${encodeURIComponent(r[4])}" target="_blank" rel="noopener">${esc(label)} &#8599;</a>`:esc(label);
+      return `<div class="r" style="display:flex;align-items:baseline;gap:var(--s3);padding:var(--s2) 0;flex-wrap:wrap;row-gap:var(--s1)">
+        <span class="ell" style="flex:1;min-width:220px;font-size:14px">${link}</span>
+        <span class="tag tag-neutral" style="flex:none">${esc(r[2]||"?")}</span>
+        <span class="muted num" style="flex:none;font-size:12.5px">${esc(fmt(r[3]||0))} lifetime</span>
+      </div>`;
+    }).join("");
+    if(rows) dayChats=`<div style="margin-top:var(--s4)">
+      <div class="muted" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--font-ui);margin-bottom:var(--s1)">Chats last active this day</div>
+      <div class="rowlist">${rows}</div>
+      <p class="subtle" style="margin-top:var(--s2)">Token figures are each chat's lifetime total; per-chat per-day is not measured.</p>
+    </div>`;
+  }
 
   const last=days.slice(-30);
   const W=940,H=170;
@@ -1485,6 +1520,7 @@ function cutDaysHTML(){
     <div style="display:flex;align-items:baseline;gap:var(--s3);margin:var(--s6) 0 var(--s2);flex-wrap:wrap;row-gap:var(--s1)">
       <h4 style="margin:0">${esc(dayTitle)}</h4><span class="muted num" style="font-size:12.5px">${esc(dayNote)}</span>
     </div>
+    ${dayChats}
     ${line}
     <div class="legend">
       <span class="k"><i style="width:14px;height:1.5px"></i>All tools</span>
@@ -1735,6 +1771,18 @@ function renderSettings(){
        <span class="field"><label>Dollar equivalents</label><span class="seg">${usdOpts}</span></span>
      </div>
 
+     <hr class="hr" style="margin:var(--s8) 0 var(--s4)">
+     <h4 style="margin:0 0 var(--s2)">Prices</h4>
+     <p style="max-width:68ch;margin:0 0 var(--s3);font-size:14px">Dollar figures use public API list prices from LiteLLM's community sheet, refreshed in the background about once a day. If the fetch fails it fails silently and the old rates keep working, so the age below is worth a glance.</p>
+     <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">
+       <span class="muted num" style="font-size:13px">${(()=>{const c=S.costs||{};
+         if(c.pricesAgeHours==null) return "Using the bundled offline rates.";
+         const h=+c.pricesAgeHours;
+         return "Sheet refreshed "+(h<1?"under an hour":(h<48?Math.round(h)+" h":Math.round(h/24)+" days"))+" ago.";})()}</span>
+       <button class="btn btn-secondary btn-sm" data-act="refreshprices">Refresh prices now</button>
+       <span class="muted" style="font-size:12.5px">${esc(st("prices"))}</span>
+     </div>
+
      ${widgetBlock}
      ${updateBlock}
 
@@ -1825,19 +1873,24 @@ function cancelAction(id){ delete S.asking[id]; render(); }
 async function runAction(id){
   delete S.asking[id];
   S.busy[id]=true; render();
-  let res;
+  let res, label="";
+  const burnThen=burnPerMin();
   try{
     if(id.indexOf("leak-")===0){
+      const c=(leaksNow()&&leaksNow().chats||[])[+id.slice(5)]||null;
+      label="Copied the compact prompt"+(c?` for “${clip(chatLabel(c),48)}”`:"");
       const ok=await copyText(HANDOFF,"Copied the compact prompt");
       res = ok ? {ok:true, message:"Copied."} : {ok:false, message:"Could not reach the clipboard.", next:"Select the prompt in Fixes and copy it by hand."};
     } else {
       const a=actionById(id);
+      label=(a&&a.title)||"";
       if(!a || !a.run){ res={ok:false, message:"That row is no longer available.", next:"Rescan the logs and try again."}; }
       else res=await a.run();
     }
   }catch(e){ res={ok:false, message:"Something went wrong on this Mac.", next:"Nothing was changed. Try again in a moment."}; }
   delete S.busy[id];
   S.ran[id]=res;
+  if(res && res.ok) S.ledger.push({t:Date.now(), label, msg:res.message||"", burnThen});
   render();
   if(res && res.ok){ pollLive(); pollLeftovers(true); }
 }
@@ -1850,6 +1903,7 @@ document.addEventListener("click", async e=>{
   const act=el.dataset.act, v=el.dataset.v, id=el.dataset.id, k=el.dataset.k;
   switch(act){
     case "setview":   e.preventDefault(); setView(v); break;
+    case "pinspan":   S.spanAuto=false; break;
     case "toggle":    S.open[k]=!S.open[k]; render(); break;
     case "reveal":    S.open[k]=!S.open[k]; render(); break;
     case "fixask":    askAction(id); break;
@@ -1865,6 +1919,7 @@ document.addEventListener("click", async e=>{
     case "addsource": doAddSource(); break;
     case "rmsource":  doRemoveSource(v); break;
     case "rescan":    doRescan(); break;
+    case "refreshprices": doRefreshPrices(); break;
     case "widget":    doWidget(); break;
     case "coachrun":  doCoach(); break;
     case "showupdate":showUpdateModal(); break;
@@ -1873,7 +1928,7 @@ document.addEventListener("click", async e=>{
 document.addEventListener("change", e=>{
   const el=e.target.closest("[data-act]"); if(!el) return;
   const act=el.dataset.act, v=el.dataset.v;
-  if(act==="setspan"){ S.span=v; S.hover=null; renderChartOnly(); if(S.span==="day") loadSeries("1d"); }
+  if(act==="setspan"){ S.span=v; S.spanAuto=false; S.hover=null; renderChartOnly(); if(S.span==="day") loadSeries("1d"); }
   else if(act==="setcut"){ S.cut=v; render(); }
   else if(act==="setleakwin"){ S.leakWin=v; loadLeaks(); render(); }
   else if(act==="setground"){ setGround(v); }
@@ -1931,6 +1986,15 @@ async function doRemoveSource(name){
   S.status.src=`Removing “${name}”. Your log files are not touched.`; render();
   try{ await apiPOST("/api/remove_source",{name}); S.status.src=`Stopped tracking “${name}”. Your log files were not touched.`; setTimeout(loadData,1000); }
   catch(e){ S.status.src="Could not reach the tracker. Nothing was changed."; }
+  render();
+}
+async function doRefreshPrices(){
+  S.status.prices="Fetching…"; render();
+  try{
+    const r=await apiPOST("/api/refresh_prices");
+    S.status.prices = (r&&r.ok) ? srv(r.message||"Refreshed.") : srv((r&&r.error)||"Could not refresh. The old rates keep working.");
+    if(r&&r.ok) await loadCosts();
+  }catch(e){ S.status.prices="Could not reach the tracker. The old rates keep working."; }
   render();
 }
 async function doRescan(){
@@ -2027,6 +2091,9 @@ async function pollLive(){
     if(!S.sampleStart) S.sampleStart=Date.now();
     S.liveSamples.push(pm);
     if(S.liveSamples.length>LIVE_SAMPLES_MAX) S.liveSamples=S.liveSamples.slice(-LIVE_SAMPLES_MAX);
+    // the page opens on the (already full) 24h view; hop to the live view
+    // once it has about 90 seconds of readings, unless the user chose a span
+    if(S.spanAuto && S.span==="day" && S.liveSamples.length>=12){ S.span="live"; S.hover=null; }
   }catch(e){}
   renderChrome();
   renderIfVisible("today"); renderIfVisible("fixes");
