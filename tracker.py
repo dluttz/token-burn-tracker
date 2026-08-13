@@ -2228,6 +2228,20 @@ _HEAVY_TASK = re.compile(r"\b(architect|refactor (the|across|this whole)|design 
                          r"root cause|strategy|from scratch)\b", re.I)
 _SELFCHECK_PAT = re.compile(r"\b(double[- ]check|verify (your|the) (work|answer|output)|are you sure|"
                             r"review your own)\b", re.I)
+_RESEARCHY_PAT = re.compile(r"\b(research|find out|look up|cite|sources?|statistics|figures|study|studies|"
+                            r"facts?|latest|news|market (size|share)|competitors?|who (is|was)|when (did|was)|"
+                            r"how (many|much))\b", re.I)
+_ESCAPE_PAT = re.compile(r"\b(if (you( a|')re )?(not |un)sure|say so|i don'?t know|don'?t (know|invent|guess|"
+                         r"make (things|stuff|anything) up)|only if (you( a|')re )?certain|admit|confidence)\b", re.I)
+_REVISION_PAT = re.compile(r"\b(change|update|tweak|edit|revise|adjust|rework|reword|modify)\b", re.I)
+_HYPOTHETICAL_PAT = re.compile(r"\b(what|which)?\s*(would|should)\s+(you|we|i|they)\b", re.I)
+def _is_revision(text):
+    """An instruction to change something — not an opinion question like
+    “what would you change”."""
+    return bool(_REVISION_PAT.search(text)) and not _HYPOTHETICAL_PAT.search(text)
+_DONE_PAT = re.compile(r"\b(done when|success|criteria|acceptance|should (look|read|behave) like|"
+                       r"so that|until (it|the)|passes?|checklist)\b", re.I)
+_BUILD_PAT = re.compile(r"\b(build|write|create|make|implement|draft|design|plan|produce|generate)\b", re.I)
 
 def _live_reread_share():
     """% of all tracked tokens that are cache reads (context being re-sent), from real data."""
@@ -2284,6 +2298,23 @@ def analyze_prompt(text):
         add(1, "warn", "No output size or format specified",
             "Output tokens are the most expensive kind (about 5× input rate on every Claude tier). Unbounded asks get long answers by default.",
             "Add one clause: “answer in 5 bullets,” “just the diff,” “one-paragraph summary,” “JSON only.”")
+    if _RESEARCHY_PAT.search(text) and not _ESCAPE_PAT.search(text):
+        add(1, "warn", "No permission to say “I don't know”",
+            "Asked for facts with no way out, a model produces a fluent answer whether or not it knows — the confidence illusion. A made-up answer costs a full retry plus the checking.",
+            "Add one line: “If you are not sure, say so — do not invent sources.” For research, ask for a confidence label on each claim.")
+    if _is_revision(text) and not _SCOPE_PAT.search(text):
+        add(1, "warn", "A revision that never quotes its target",
+            "Asked loosely for a change, a model rewrites the whole thing and can touch sections you never mentioned — you pay for a full regeneration every round.",
+            "Quote the exact snippet, say what is wrong with it, and ask for only that section back.")
+    if est_tokens >= 700:
+        add(1, "warn", "A lot of pasted context (about %s tokens)" % f"{est_tokens:,}",
+            "Past a point, extra context makes answers worse, not better — and every pasted line is billed on every turn that follows. Context is something to filter, not accumulate.",
+            "Paste only the relevant excerpts, or name the files by path and let the tool read what it needs.")
+    if (words >= 12 and _BUILD_PAT.search(text) and not _DONE_PAT.search(text)
+            and not _FORMAT_PAT.search(text)):
+        add(1, "info", "How will it know it is done?",
+            "The strongest lever in a prompt is a clear outcome plus a test for done. Without one the model decides for itself, and you pay for the review loop.",
+            "Add one clause: “Done when <the check you will apply>.”")
     qs = text.count("?")
     if qs >= 4:
         add(1, "info", "%d questions in one prompt" % qs,
@@ -2335,12 +2366,19 @@ def analyze_prompt(text):
     elif not _SCOPE_PAT.search(text) and any(
             w in text.lower() for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs")):
         adds.append("Where to look: <the exact files, folders or links — delete this line if it already has them open>")
+    if _is_revision(text) and not _SCOPE_PAT.search(text):
+        adds.append("Only change: <quote the exact snippet — and return only that section>")
     if not _FORMAT_PAT.search(text) and words >= 8:
         adds.append("Answer as: <a size or format, e.g. 5 bullets, just the diff, one paragraph>")
+    if _RESEARCHY_PAT.search(text) and not _ESCAPE_PAT.search(text):
+        adds.append("If you are not sure, say so — do not invent sources.")
+    if (words >= 12 and _BUILD_PAT.search(text) and not _DONE_PAT.search(text)
+            and not _FORMAT_PAT.search(text)):
+        adds.append("Done when: <the check you will apply>")
     scaffold = core + (("\n\n" + "\n".join(adds)) if adds else "")
     return {"ok": True, "estTokens": est_tokens, "words": words, "score": score,
-            "findings": findings, "scaffold": scaffold, "rates": rates,
-            "rereadShare": rr}
+            "findings": findings, "scaffold": scaffold, "scaffoldHasAdds": bool(adds),
+            "rates": rates, "rereadShare": rr}
 
 # ---------- server ----------
 THEME_FILE = os.path.join(DATA_DIR, "theme.json")

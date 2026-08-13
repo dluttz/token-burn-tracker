@@ -1102,9 +1102,9 @@ function reclaimHTML(acts){
       <div class="muted" style="font-size:13px">This panel fills itself in the moment something starts wasting tokens, so it is worth leaving open while you work.</div>
     </div>`;
   }
-  return head+`<div class="rowlist">${rows.map(a=>{
+  return head+`<div class="card elev-sm" style="background:var(--surface);border-left:3px solid var(--accent);padding:0 var(--s4);gap:0">${rows.map(a=>{
     const ask=S.asking[a.id];
-    return `<div class="r" style="${S.ran[a.id]&&S.ran[a.id].ok?"opacity:.72;":""}">
+    return `<div style="border-bottom:1px solid var(--rule);${S.ran[a.id]&&S.ran[a.id].ok?"opacity:.72;":""}">
       <div class="actrow">
         <span class="main">
           <span style="display:block;font-size:15px">${esc(a.title)}</span>
@@ -1234,11 +1234,15 @@ function chatLabel(c){
   return t || (c.project||"(untitled chat)");
 }
 function chatSub(c){
+  /* Windows select chats by LAST ACTIVITY, so that is the date shown first —
+     a chat started in May but used yesterday belongs in "last 30 days". */
   const parts=[];
   if(c.tool) parts.push(c.tool+" chat");
   if(c.project && c.project!=="Cowork sessions") parts.push(c.project);
-  const when=String(c.when||c.date||"").slice(0,10);
-  if(when){ const p=when.split("-"); if(p.length===3) parts.push(`${MON[(+p[1])-1]} ${+p[2]}`); }
+  const act=shortDate(c.lastActive||c.date);
+  if(act) parts.push("last active "+act);
+  const st=shortDate(String(c.when||"").slice(0,10));
+  if(st && st!==act) parts.push("started "+st);
   if(c.titleSource!=="app") parts.push("no app title, this is its opening request");
   return parts.join(" · ");
 }
@@ -1300,14 +1304,15 @@ function cutChatsHTML(){
     const asking=S.asking[id], ran=S.ran[id];
     let action;
     if(ran) action=ran.ok?`<span class="tag tag-accent">Copied</span>`:`<span class="tag tag-quiet">Not copied</span>`;
-    else if(asking) action=`<button class="btn btn-primary btn-sm" data-act="fixgo" data-id="${attr(id)}">Copy the prompt</button>
-      <button class="btn btn-ghost btn-sm" data-act="fixcancel" data-id="${attr(id)}">Cancel</button>`;
+    else if(asking) action="";      // the buttons render in the wide cell below, where they fit
     else action=`<button class="btn btn-secondary btn-sm" data-act="fixask" data-id="${attr(id)}">Compact</button>`;
     return `<tr>
       <td>
         <span class="ell" style="display:block">${link}</span>
         ${sub?`<span class="ell muted" style="display:block;font-size:12px">${esc(sub)}</span>`:""}
-        ${asking?`<span class="muted" style="display:block;font-size:12.5px;margin-top:6px">Compacting swaps that chat's history for a summary. <b>What stops:</b> the re-reading. <b>What survives:</b> the full transcript on disk. We cannot do it inside another app, so this copies a prompt for you to paste into that chat.</span>`:""}
+        ${asking?`<span style="display:block;font-size:12.5px;margin-top:6px"><span class="muted">Compacting swaps that chat's history for a summary. <b>What stops:</b> the re-reading. <b>What survives:</b> the full transcript on disk. We cannot do it inside another app, so this copies a prompt for you to paste into that chat.</span>
+          <span style="display:flex;gap:var(--s2);margin-top:var(--s2)"><button class="btn btn-primary btn-sm" data-act="fixgo" data-id="${attr(id)}">Copy the prompt</button>
+          <button class="btn btn-ghost btn-sm" data-act="fixcancel" data-id="${attr(id)}">Cancel</button></span></span>`:""}
         ${(ran&&ran.ok)?`<span class="muted" style="display:block;font-size:12.5px;margin-top:6px">Copied. Paste it into that chat, then open a new one with the note it hands back.${(+c.saves>0)?" That should stop about "+esc(fmt(c.saves))+" of re-sending.":""}</span>`:""}
         ${(ran&&!ran.ok)?`<span class="muted" style="display:block;font-size:12.5px;margin-top:6px">${esc(ran.next||"")}</span>`:""}
       </td>
@@ -1620,11 +1625,11 @@ function renderCoach(){
       ${(c.findings||[]).map(f=>`<p style="margin:0;font-size:14px;border-left:${f.severity==="crit"?"3px solid var(--accent)":"1px solid var(--rule)"};padding-left:var(--s3)">
         <b>${esc(srv(f.title))}</b> ${esc(srv(f.why))}<br><span class="muted">${esc(srv(f.fix))}</span></p>`).join("")}
       ${(c.findings||[]).length?"":`<p style="margin:0;font-size:14px;border-left:1px solid var(--rule);padding-left:var(--s3)">Nothing to tighten. Send it as it is.</p>`}
-      ${(c.scaffold&&c.scaffold.indexOf("<")>=0)?`<div style="margin-top:var(--s2)">
+      ${(c.scaffold&&(c.scaffoldHasAdds||c.scaffold.indexOf("<")>=0))?`<div style="margin-top:var(--s2)">
         <div class="muted" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--font-ui);margin-bottom:var(--s1)">The tightened version — your prompt, plus only what is missing</div>
         <div class="cmdbox" style="font-family:var(--font-body);font-size:14px;white-space:pre-wrap;word-break:normal;line-height:1.5">${esc(c.scaffold)}</div>
         <div style="margin-top:var(--s2)"><button class="btn btn-primary" data-act="copy" data-copy="${attr(c.scaffold)}">Copy it</button>
-        <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">Fill the bracketed line${(c.scaffold.match(/</g)||[]).length>1?"s":""}, or delete ${(c.scaffold.match(/</g)||[]).length>1?"them":"it"}, and send.</span></div>
+        <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">${(c.scaffold.match(/</g)||[]).length?"Fill anything in brackets, or delete it, and send.":"Copy and send."}</span></div>
       </div>`:""}
     </div>` : (c&&!c.ok ? `<p class="muted" style="margin-top:var(--s3);font-size:13.5px">${esc(srv(c.error||"Could not read it."))}</p>` : "");
   $("#view-coach").innerHTML =
@@ -1638,7 +1643,8 @@ function renderCoach(){
          <span class="muted" style="font-size:12.5px">or press Cmd+Enter</span>
        </div>
        ${results}
-     </div>`;
+     </div>
+     <p class="muted" style="max-width:76ch;margin:var(--s8) 0 0;font-size:12px">The checks draw on your own measured usage on this Mac and on public prompting guidance, including Nate B Jones&#39;s prompting frameworks. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`;
 }
 
 /* ===========================================================================
