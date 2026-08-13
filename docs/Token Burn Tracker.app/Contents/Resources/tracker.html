@@ -1620,8 +1620,12 @@ function renderCoach(){
       ${(c.findings||[]).map(f=>`<p style="margin:0;font-size:14px;border-left:${f.severity==="crit"?"3px solid var(--accent)":"1px solid var(--rule)"};padding-left:var(--s3)">
         <b>${esc(srv(f.title))}</b> ${esc(srv(f.why))}<br><span class="muted">${esc(srv(f.fix))}</span></p>`).join("")}
       ${(c.findings||[]).length?"":`<p style="margin:0;font-size:14px;border-left:1px solid var(--rule);padding-left:var(--s3)">Nothing to tighten. Send it as it is.</p>`}
-      ${c.scaffold?`<div style="margin-top:var(--s1)"><button class="btn btn-primary" data-act="copy" data-copy="${attr(c.scaffold)}">Copy the tightened version</button>
-        <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">Fill the brackets, delete what you do not need, send that instead.</span></div>`:""}
+      ${(c.scaffold&&c.scaffold.indexOf("<")>=0)?`<div style="margin-top:var(--s2)">
+        <div class="muted" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--font-ui);margin-bottom:var(--s1)">The tightened version — your prompt, plus only what is missing</div>
+        <div class="cmdbox" style="font-family:var(--font-body);font-size:14px;white-space:pre-wrap;word-break:normal;line-height:1.5">${esc(c.scaffold)}</div>
+        <div style="margin-top:var(--s2)"><button class="btn btn-primary" data-act="copy" data-copy="${attr(c.scaffold)}">Copy it</button>
+        <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">Fill the bracketed line${(c.scaffold.match(/</g)||[]).length>1?"s":""}, or delete ${(c.scaffold.match(/</g)||[]).length>1?"them":"it"}, and send.</span></div>
+      </div>`:""}
     </div>` : (c&&!c.ok ? `<p class="muted" style="margin-top:var(--s3);font-size:13.5px">${esc(srv(c.error||"Could not read it."))}</p>` : "");
   $("#view-coach").innerHTML =
     `<h6 class="muted">Before you spend the tokens</h6>

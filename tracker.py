@@ -2214,8 +2214,10 @@ _BROAD_PAT = re.compile(r"\b(everything|entire|whole (project|codebase|folder|re
 _SCOPE_PAT = re.compile(r"(/[\w.~-]+/|\.[a-z]{2,4}\b|`[^`]+`|\"[^\"]+\"|'[^']+'|\bfunction\b|\bclass\b|"
                         r"\bline \d|\bsection\b|https?://)", re.I)
 _FORMAT_PAT = re.compile(r"\b(format|json|table|list|bullet|markdown|csv|one (paragraph|line|sentence)|"
-                         r"under \d+|max(imum)? \d+|\d+ (words|lines|sentences|bullets|items)|steps|outline|"
-                         r"short|brief|concise|tl;?dr)\b", re.I)
+                         r"under \d+|max(imum)? \d+|top \d+|"
+                         r"\d+\s+(?:\w+\s+){0,2}(words|lines|sentences|paragraphs|bullets|items|points|examples|"
+                         r"ideas|options|suggestions|criticisms?|changes|ways|steps|questions|feedback)|"
+                         r"just the (diff|change)|diff only|steps|outline|short|brief|concise|tl;?dr)\b", re.I)
 _NEG_PAT = re.compile(r"\b(don'?t|do not|avoid|exclude|skip|ignore|without|no need to|leave out|except)\b", re.I)
 _CONT_PAT = re.compile(r"\b(as (we|i) (discussed|said|mentioned)|earlier you|as before|continue (from|where)|"
                        r"remember (when|what)|like (before|last time)|previous(ly)? (you|we))\b", re.I)
@@ -2302,46 +2304,40 @@ def analyze_prompt(text):
     elif heavy:
         add(2, "info", "Heavy-reasoning task detected (“%s”)" % heavy.group(0),
             "Multi-constraint work (architecture, cross-file refactors, security review) is where big models earn their price — a cheap model that gets it wrong costs more in retries.",
-            "Use your strongest model, but scope it tightly (Lens 1) so its expensive tokens go to thinking, not reading.")
-    else:
-        add(2, "info", "Default rule: middle tier first",
-            "A Sonnet-class model handles most day-to-day tasks at a fifth of Opus-class input price; escalate only when it visibly struggles.",
-            "Start medium. Route down for mechanical work, up for genuinely hard reasoning.")
+            "Use your strongest model, but scope it tightly so its expensive tokens go to thinking, not reading.")
 
-    # ---- Lens 3 · When to start a fresh chat ----
+    # ---- Lens 3 · When to start a fresh chat (only when the prompt leans on one) ----
     rr = _live_reread_share()
     if _CONT_PAT.search(text):
+        extra = (" On this Mac, %d%% of everything measured is already re-read context." % rr) if (rr is not None and rr >= 70) else ""
         add(3, "warn", "This prompt leans on a long conversation (“%s”)" % _CONT_PAT.search(text).group(0),
-            "Every message re-sends the entire thread. Asking a one-line question at the bottom of a 100k-token chat costs ~100k input tokens — every time.",
-            "If the thread is long, use the dashboard's “Copy handoff prompt” (Fixes) to carry a compact summary into a fresh chat.")
-    if rr is not None and rr >= 70:
-        add(3, "crit" if rr >= 90 else "warn", "Your own data: %d%% of your tokens are re-read context" % rr,
-            "That share of your total burn is chats re-sending their own history rather than new work — the classic long-thread tax.",
-            "Start new chats per task, and hand off with a summary instead of continuing giant threads. One topic, one chat.")
-    else:
-        add(3, "info", "Fresh-chat rule of thumb",
-            "A chat's whole history rides along with every turn. New topic in an old chat = paying for the old topic forever.",
-            "New task → new chat. Continue a thread only when the history itself is what you need.")
+            "Every message re-sends the entire thread. Asking a one-line question at the bottom of a 100k-token chat costs ~100k input tokens — every time." + extra,
+            "If the thread is long, carry a compact summary into a fresh chat instead (the compact prompt on the Fixes page does this).")
 
     # ---- Lens 4 · Using tools against each other ----
     if _SELFCHECK_PAT.search(text):
         add(4, "info", "Asking a model to check its own work",
             "Models grade their own answers generously. A second tool catches more for the same tokens.",
             "Paste the answer into a different tool with “find what's wrong with this” — cheap model is fine for critique.")
-    add(4, "info", "Draft cheap, polish expensive",
-        "The biggest cross-tool saving: produce the bulk (draft, boilerplate, extraction) on a cheap model, then spend premium tokens only on judgment and final quality.",
-        "Example: Haiku-class drafts the doc → Opus-class rewrites the two paragraphs that matter. You pay frontier price for 10% of the tokens.")
 
     # ---- score ----
     score = 100
     for f in findings:
         score -= {"crit": 22, "warn": 10, "info": 2}[f["severity"]]
     score = max(5, min(100, score))
-    scaffold = ("GOAL: <one sentence — what done looks like>\n"
-                "WHERE: <exact files / folders / links — and what to SKIP>\n"
-                "OUTPUT: <format + length cap, e.g. “5 bullets” or “just the diff”>\n"
-                "MODEL: <cheapest tier that can do this — see suggestion above>\n\n"
-                + text)
+    # The tightened version starts from what was typed — a lazy user should never
+    # re-enter information the prompt already carries. Bracketed lines appear only
+    # for levers the prompt is actually missing; no gaps means it ships as-is.
+    core = " ".join(text.split())
+    adds = []
+    if _BROAD_PAT.search(text) and not _NEG_PAT.search(text):
+        adds.append("Skip: <what it should not read, e.g. tests, node_modules, docs>")
+    elif not _SCOPE_PAT.search(text) and any(
+            w in text.lower() for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs")):
+        adds.append("Where to look: <the exact files, folders or links — delete this line if it already has them open>")
+    if not _FORMAT_PAT.search(text) and words >= 8:
+        adds.append("Answer as: <a size or format, e.g. 5 bullets, just the diff, one paragraph>")
+    scaffold = core + (("\n\n" + "\n".join(adds)) if adds else "")
     return {"ok": True, "estTokens": est_tokens, "words": words, "score": score,
             "findings": findings, "scaffold": scaffold, "rates": rates,
             "rereadShare": rr}
