@@ -1460,10 +1460,11 @@ def build_insights(data):
             sug.append({"tag": "Heavy folder", "score": p[1] * 0.6,
                         "text": (f"The folder “{disp}” has burned {fmt_tok(p[1])}. If work there is exploratory, scope each "
                                  f"session to one file/task — that's where tighter prompts save the most. If you no longer need it, you can delete it."),
+                        "folder": real,   # verified absolute path, or None — the trash_folder whitelist keys off this
                         "revealLabel": "How do I find or delete this folder?",
                         "reveal": _folder_delete_help(disp, path, real is not None, hidden)})
     sug.sort(key=lambda s: -s["score"])
-    suggestions = [{"tag": s["tag"], "text": s["text"],
+    suggestions = [{"tag": s["tag"], "text": s["text"], "folder": s.get("folder"),
                     "reveal": s.get("reveal"), "revealLabel": s.get("revealLabel")} for s in sug]
 
     # ----- waste / suggested-to-remove — with what-it-does / have-you-used-it / what-the-fix-does -----
@@ -1539,6 +1540,39 @@ def apply_fix(label):
         return {"ok": True, "message": f"{label} disabled and moved to Trash (reversible)."}
     except Exception as e:
         return {"ok": False, "error": f"Disabled, but couldn't move the file: {e}"}
+
+def trash_folder(body):
+    """Move a flagged heavy folder to the Trash. Whitelisted to the folders the
+    insights engine is flagging RIGHT NOW, so a request can never name an
+    arbitrary path. The move is os.rename into ~/.Trash — reversible by
+    dragging the folder back out, until the user empties the Trash."""
+    path = body.get("path") or ""
+    flagged = set()
+    try:
+        if STATE.get("data"):
+            for sg in build_insights(STATE["data"]).get("suggestions", []):
+                if sg.get("folder"):
+                    flagged.add(sg["folder"])
+    except Exception:
+        pass
+    if path not in flagged:
+        return {"ok": False, "error": "Not a folder this page is currently flagging."}
+    real = os.path.realpath(path)
+    home = os.path.realpath(HOME)
+    if not os.path.isdir(real) or real in (home, "/") or not real.startswith(home + os.sep):
+        return {"ok": False, "error": "That folder is outside what this fix is willing to move."}
+    if os.path.realpath(HERE).startswith(real):
+        return {"ok": False, "error": "That folder contains the tracker itself."}
+    trash = os.path.join(home, ".Trash")
+    dest = os.path.join(trash, os.path.basename(real))
+    if os.path.exists(dest):
+        dest = os.path.join(trash, os.path.basename(real) + "." + str(int(time.time())))
+    try:
+        os.rename(real, dest)
+    except Exception as e:
+        return {"ok": False, "error": (type(e).__name__ + ": " + str(e))[:200]}
+    return {"ok": True, "message": "Moved to the Trash. Drag it back out of the Trash to undo.",
+            "dest": dest}
 
 def find_leftovers():
     """Idle, leftover AI processes that are safe to quit. Strict protections:
@@ -2566,7 +2600,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(400, json.dumps({"ok": False})); return
             ok = save_theme(body.get("primary"), body.get("accent"))
             self._send(200 if ok else 400, json.dumps(dict({"ok": ok}, **load_theme()))); return
-        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget", "/api/prompt_check")
+        POSTS = ("/api/fix", "/api/kill_leftovers", "/api/add_source", "/api/remove_source", "/api/applyupdate", "/api/install_widget", "/api/prompt_check", "/api/trash_folder")
         if not any(self.path.startswith(x) for x in POSTS):
             self._send(404, json.dumps({"error": "not found"})); return
         # Security: local origin only + per-launch secret that only our served page knows.
@@ -2590,6 +2624,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith("/api/prompt_check"):
             # analysis happens in-process; the prompt is not stored, logged, or sent anywhere
             self._send(200, json.dumps(analyze_prompt(body.get("prompt") or ""))); return
+        if self.path.startswith("/api/trash_folder"):
+            res = trash_folder(body); _LIVE_CACHE.clear()
+            self._send(200, json.dumps(res)); return
         if self.path.startswith("/api/kill_leftovers"):
             res = kill_leftovers(); _LIVE_CACHE.clear()
             self._send(200, json.dumps(res)); return

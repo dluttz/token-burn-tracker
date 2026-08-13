@@ -444,6 +444,7 @@ function demoInsights(){
   return {
     suggestions:[
       {tag:"Heavy folder", text:"The folder “code/billing-service” has burned 27% of everything you have ever used. If work there is exploratory, scope each session to one file or one task.",
+        folder:"/Users/you/code/billing-service",
         revealLabel:"How do I find this folder?", reveal:"Full path:  ~/code/billing-service\nFind it:  open Finder, Go menu, “Go to Folder…” (Shift+Cmd+G), paste the path, press Enter."}
     ],
     waste:[
@@ -598,6 +599,18 @@ function pts(vals, max, w, h){
    folder names) is never rewritten. */
 function srv(s){ return String(s==null?"":s).replace(/\s*\u2014\s*/g, ", "); }
 function srvLabel(s){ return String(s==null?"":s).replace(/\s*\u2014\s*/, ": "); }
+/* Find the transcript file behind a live title, so the UI can say when the
+   busiest chat is the app's built-in Dispatch session (path local_ditto_*). */
+function chatFileFor(title){
+  const t=String(title||"").slice(0,40);
+  if(!t) return null;
+  const pools=[(S.agents&&S.agents.runs)||[],
+               ((S.leaks&&S.leaks.leaks&&S.leaks.leaks.chats)||[]),
+               ((S.leaksAll&&S.leaksAll.leaks&&S.leaksAll.leaks.chats)||[])];
+  for(const pool of pools) for(const r of pool)
+    if(r && r.file && String(r.title||"").slice(0,40)===t) return r.file;
+  return null;
+}
 function toolNote(name){
   return {"Claude Code":"~/.claude/projects/**/*.jsonl, exact per-turn split",
           "Cowork":"the local chat store, exact per-turn split",
@@ -706,6 +719,10 @@ function buildActions(){
   const rereadPct=bd.pct("cache_read");
   if(top && (+top.burnMin||0)>0 && rereadPct>=40){
     const perMin=Math.round(top.burnMin*rereadPct/100);
+    const tfile=chatFileFor(top.title);
+    const dispatch=!!(tfile && tfile.indexOf("/local_ditto_")>=0);
+    const targetHTML=`<div style="font-size:14px;margin-top:var(--s1)">Paste it into: <b style="color:var(--accent)">“${esc(clip(top.title,80))}”</b>`+
+      (dispatch?` <span class="muted">(this looks like the app&#39;s built-in Dispatch chat, so it may not sit in your normal sidebar list)</span>`:``)+`</div>`;
     out.push({
       id:"compact-live", group:"now", live:true, tag:"Running now", src:"Live",
       title:"The busiest chat running now is mostly re-reading itself",
@@ -715,13 +732,13 @@ function buildActions(){
       save:null,
       perMinLabel:`about ${fmt(perMin)}/min, estimated`, perMinRank:perMin,
       estBasis:`Estimated from this session at ${fmt(top.burnMin)}/min and your measured ${Math.round(rereadPct)}% cache-read share.`,
-      cta:"Copy the compact prompt", doneLab:"Copied",
+      cta:"Copy the compact prompt", doneLab:"Copied", targetHTML,
       confirm:{stops:"The re-reading, once you paste the note into a new chat.",
                survives:"The full transcript on disk, and everything the chat has already produced.",
                extra:"We cannot compact another app's chat from here, so this copies a prompt for you to paste."},
       run:async()=>{
         const ok=await copyText(HANDOFF,"Copied the compact prompt");
-        return ok ? {ok:true, message:"Copied.", next:"Paste it into that chat, then open a new chat with the note it hands back."}
+        return ok ? {ok:true, message:"Copied.", next:`Paste it into “${clip(top.title,60)}”, then open a new chat with the note it hands back.`}
                   : {ok:false, message:"Could not reach the clipboard.", next:"Open Fixes and copy the prompt from there."};
       }
     });
@@ -816,12 +833,35 @@ function buildActions(){
 
   /* --- whatever the backend found in your own history -------------------- */
   (ins.suggestions||[]).forEach((s,i)=>{
+    const reveal=s.reveal?{label:srv(s.revealLabel||"Details"), text:srv(s.reveal)}:null;
+    if(s.folder){
+      /* flagged heavy folder: a real one-click fix, not Finder homework */
+      out.push({
+        id:"folder-"+i, group:"worth", live:false, tag:String(s.tag||"Heavy folder"), src:"Efficiency",
+        title:srv(s.text).split(". ")[0]+".",
+        what:srv(s.text),
+        usage:"", result:"The whole folder moves to the Trash. Its token history on this page stays.",
+        save:null, savePer:"", reveal,
+        cta:"Move it to the Trash", doneLab:"In the Trash",
+        confirm:{stops:`Nothing that is running. The folder ${s.folder} and every file in it moves to the Trash.`,
+                 survives:"Its token history here, and the folder itself inside the Trash until you empty it. Drag it back out to undo.",
+                 extra:"Only do this if you no longer need that project's files. This moves your real files, not just their numbers."},
+        run:async()=>{
+          const r=await apiPOST("/api/trash_folder",{path:s.folder});
+          if(!r||!r.ok) return {ok:false, message:srv((r&&r.error)||"Could not move it."),
+            next:"Nothing was changed. You can still move it yourself in Finder; the reveal below says where it is."};
+          return {ok:true, message:srv(r.message||"Moved to the Trash."),
+            next:"Drag it back out of the Trash to undo. The tokens it already burned stay on this page."};
+        }
+      });
+      return;
+    }
     out.push({
       id:"sug-"+i, group:"worth", live:false, tag:String(s.tag||"Habit"), src:"Efficiency",
       title:srv(s.text).split(". ")[0]+".",
       what:srv(s.text), usage:"", result:"",
-      save:null, savePer:"", cta:s.reveal?srv(s.revealLabel||"Details"):"", doneLab:"",
-      reveal:s.reveal?{label:srv(s.revealLabel||"Details"), text:srv(s.reveal)}:null
+      save:null, savePer:"", cta:reveal?reveal.label:"", doneLab:"",
+      reveal
     });
   });
 
@@ -847,6 +887,7 @@ function hiddenCount(){
 function confirmHTML(a){
   const c=a.confirm||{};
   return `<div class="confirmbar rise">
+    ${a.targetHTML||""}
     <div class="q"><b>What stops:</b> ${esc(c.stops||"nothing that is running")}<br>
       <b>What survives:</b> ${esc(c.survives||"everything else")}${c.extra?`<br><span class="muted">${esc(c.extra)}</span>`:""}</div>
     <button class="btn btn-primary btn-sm" data-act="fixgo" data-id="${attr(a.id)}">${esc(a.cta)}</button>
@@ -1064,6 +1105,7 @@ function reclaimHTML(acts){
         <span class="main">
           <span style="display:block;font-size:15px">${esc(a.title)}</span>
           <span class="muted" style="display:block;font-size:12.5px">${esc(a.usage||a.what)}</span>
+          ${a.targetHTML||""}
           ${a.estBasis?`<span class="faint" style="display:block;font-size:12px">${esc(a.estBasis)}</span>`:""}
         </span>
         <span class="eff num">${esc(a.perMinLabel||"")}</span>
@@ -1197,6 +1239,20 @@ function chatSub(c){
   return parts.join(" · ");
 }
 function leaksNow(){ return (S.leaks && S.leaks.leaks) || null; }
+/* The 1x unit. Using the selected window's own median made the same chat read
+   4.9x in one window and 145x in another, which looked like a bug. The unit is
+   now always the all-time typical chat, so a badge means the same thing in
+   every window. */
+function leakUnit(){
+  const l=(S.leaksAll && S.leaksAll.leaks) || null;
+  return {resent:(l&&+l.typical)||0, turns:(l&&+l.typicalTurns)||0};
+}
+function multBadge(resent){
+  const u=leakUnit().resent;
+  if(!(u>0)) return null;
+  const m=resent/u;
+  return (m>=9.95 ? String(Math.round(m)) : (Math.round(m*10)/10).toFixed(1).replace(/\.0$/,"")) + "x";
+}
 
 function cutChatsHTML(){
   const lk=leaksNow();
@@ -1225,9 +1281,10 @@ function cutChatsHTML(){
       </div>${codexNote}`;
   }
 
-  const keyLine = lk.typical>0
-    ? `<p style="max-width:74ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is a typical chat in this window: ${esc(fmt(lk.typical))} of re-sent text across ${esc(nfmt(lk.typicalTurns))} messages. A chat marked 4x re-sent four times that.</p>`
-    : "";
+  const u=leakUnit();
+  const keyLine = u.resent>0
+    ? `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is your typical chat across all your history: ${esc(fmt(u.resent))} of re-sent text over ${esc(nfmt(u.turns))} messages. The unit is the same in every window, so a chat keeps its badge when you switch windows.</p>`
+    : (lk.typical>0 ? `<p style="max-width:74ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is a typical chat in this window: ${esc(fmt(lk.typical))} of re-sent text across ${esc(nfmt(lk.typicalTurns))} messages.</p>` : "");
 
   const rows=lk.chats.map((c,i)=>{
     const id="leak-"+i;
@@ -1252,7 +1309,7 @@ function cutChatsHTML(){
       </td>
       <td class="num" style="text-align:right;white-space:nowrap">${esc(nfmt(c.turns||0))}</td>
       <td class="num" style="text-align:right;white-space:nowrap">${esc(fmt(c.resent||0))}</td>
-      <td class="num" style="text-align:right;white-space:nowrap">${c.multiple!=null?`<span class="tag tag-accent num">${esc(c.multiple)}x</span>`:""}</td>
+      <td class="num" style="text-align:right;white-space:nowrap">${(()=>{const b=multBadge(c.resent); if(b) return `<span class="tag tag-accent num">${esc(b)}</span>`; return c.multiple!=null?`<span class="tag tag-accent num">${esc(c.multiple)}x</span>`:"";})()}</td>
       <td style="text-align:right;white-space:nowrap">${action}</td>
     </tr>`;
   }).join("");
@@ -1267,7 +1324,7 @@ function cutChatsHTML(){
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript.</p>
+    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript. Each window lists the eight heaviest chats that were last <i>active</i> in it, so a chat can make the cut in a short window and miss it in a longer one where bigger chats crowd it out.</p>
     ${codexNote}`;
 }
 
@@ -1470,6 +1527,7 @@ function fixCardHTML(a){
         ${(a.save!=null&&S.showUsd&&BLENDED_RATE>0)?`<div class="muted num" style="font-size:12px">${esc(usd(costOf(a.save)))} at list prices</div>`:""}
       </div>
     </div>
+    ${a.targetHTML||""}
     ${a.estBasis?`<div class="faint" style="font-size:12px">${esc(a.estBasis)}</div>`:""}
     <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">
       ${ctaHTML(a)}
@@ -1499,7 +1557,7 @@ function fixRowHTML(a){
       ${a.reveal?`<div style="margin-top:var(--s3)"><button class="btn btn-secondary btn-sm" data-act="reveal" data-k="rev-${attr(a.id)}">${esc(a.reveal.label)}</button>
         ${S.open["rev-"+a.id]?`<div class="muted" style="margin-top:var(--s2);font-size:12.5px;white-space:pre-wrap">${esc(a.reveal.text)}</div>`:""}</div>`:""}
       <div style="display:flex;align-items:center;gap:var(--s3);margin-top:var(--s3);flex-wrap:wrap">
-        ${(a.cta&&!a.reveal)?ctaHTML(a):""}
+        ${(a.cta&&(a.run||!a.reveal))?ctaHTML(a):""}
         <span style="margin-left:auto">${rowToolsHTML(a)}</span>
       </div>
       ${S.asking[a.id]?confirmHTML(a):""}
@@ -1914,6 +1972,7 @@ async function loadCosts(){
 }
 async function loadLeaks(){
   try{ S.leaks=await apiJSON("/api/leaks?days="+encodeURIComponent(S.leakWin)); }catch(e){}
+  try{ S.leaksAll = S.leakWin==="all" ? S.leaks : await apiJSON("/api/leaks?days=all"); }catch(e){}
   renderIfVisible("where"); renderIfVisible("today"); renderIfVisible("fixes");
 }
 async function loadSeries(range){
