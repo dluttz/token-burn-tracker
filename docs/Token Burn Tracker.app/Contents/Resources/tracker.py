@@ -1503,22 +1503,40 @@ def build_insights(data):
                         "text": (f"Your biggest single chat — “{(title or 'untitled')[:70]}” ({tool}, {fmt_tok(tok)}, "
                                  f"{tok/grand*100:.0f}% of all your tokens) — keeps re-reading its own context every turn. "
                                  f"Wrap it up and start a fresh thread (or /compact) rather than continuing it.")})
-    # 3) heaviest real project (named by its folder)
+    # 3) heaviest real project (named by its folder). Prefer the heaviest one whose
+    #    folder still EXISTS, so the row carries a working move-to-Trash button —
+    #    a suggestion that says "you can delete it" about a folder that is already
+    #    gone is a to-do with nothing to do.
     if projects:
-        p = next((x for x in projects if x[0] not in ("Cowork sessions", "(unknown)")), None)
-        if p and p[1] / grand > 0.05:
-            disp = p[0]
-            ppaths = data.get("projectPaths", {})
+        ppaths = data.get("projectPaths", {})
+        def _locate(disp):
             realpath = ppaths.get(disp)              # actual absolute cwd recorded in the logs
             cands = ([realpath] if realpath else []) + [os.path.expanduser("~/" + disp), "/" + disp, disp]
             real = next((c for c in cands if c and os.path.isdir(c)), None)
-            path = real or realpath or os.path.expanduser("~/" + disp)
+            return real, (real or realpath or os.path.expanduser("~/" + disp))
+        pick = None                                  # (project_row, real, path); heaviest existing wins
+        for x in projects:
+            if x[0] in ("Cowork sessions", "(unknown)") or x[1] / grand <= 0.05:
+                continue
+            real, path = _locate(x[0])
+            if pick is None:
+                pick = (x, real, path)
+            if real:
+                pick = (x, real, path)
+                break
+        if pick:
+            p, real, path = pick
+            disp = p[0]
             hidden = any(seg.startswith(".") for seg in path.split("/") if seg)
-            sug.append({"tag": "Heavy folder", "score": p[1] * 0.6,
-                        "text": (f"The folder “{disp}” has burned {fmt_tok(p[1])}. If work there is exploratory, scope each "
-                                 f"session to one file/task — that's where tighter prompts save the most. If you no longer need it, you can delete it."),
+            if real:
+                text = (f"The folder “{disp}” has burned {fmt_tok(p[1])}. If work there is exploratory, scope each "
+                        f"session to one file/task — that's where tighter prompts save the most. If you no longer need it, you can delete it.")
+            else:
+                text = (f"The folder “{disp}” burned {fmt_tok(p[1])} before it was removed from this Mac. "
+                        f"Its history stays counted; there is nothing left to delete.")
+            sug.append({"tag": "Heavy folder", "score": p[1] * 0.6, "text": text,
                         "folder": real,   # verified absolute path, or None — the trash_folder whitelist keys off this
-                        "revealLabel": "How do I find or delete this folder?",
+                        "revealLabel": "Where was this folder?" if not real else "How do I find or delete this folder?",
                         "reveal": _folder_delete_help(disp, path, real is not None, hidden)})
     sug.sort(key=lambda s: -s["score"])
     suggestions = [{"tag": s["tag"], "text": s["text"], "folder": s.get("folder"),
@@ -2384,6 +2402,8 @@ def _is_revision(text):
     return bool(_REVISION_PAT.search(text)) and not _HYPOTHETICAL_PAT.search(text)
 _DONE_PAT = re.compile(r"\b(done when|success|criteria|acceptance|should (look|read|behave) like|"
                        r"so that|until (it|the)|passes?|checklist)\b", re.I)
+_CHECK_PAT = re.compile(r"\b(before (you )?(answer|reply|finish|show)|double[- ]check|verify|"
+                        r"check (that|your|it|each)|make sure|confirm (that|it))\b", re.I)
 _BUILD_PAT = re.compile(r"\b(build|write|create|make|implement|draft|design|plan|produce|generate)\b", re.I)
 
 def _live_reread_share():
@@ -2410,118 +2430,168 @@ def _model_rate_line():
     return out
 
 def analyze_prompt(text):
+    """Grade a prompt on six dimensions, each tied to a detectable signal and a
+    named principle from Nate B Jones's prompting work (the projection trap,
+    the cognitive bandwidth trap, output contracts, the confidence illusion,
+    the revision loop, quality checks). Each graded dimension quotes what the
+    prompt actually says, criticises it plainly, and hands back one ready
+    sentence that fixes it. Runs locally; the prompt is never stored or sent."""
     text = (text or "").strip()
     if not text:
         return {"ok": False, "error": "empty prompt"}
     words = len(text.split())
     est_tokens = max(1, round(len(text) / 4))
-    findings = []
-    def add(lens, sev, title, why, fix):
-        findings.append({"lens": lens, "severity": sev, "title": title, "why": why, "fix": fix})
+    low = text.lower()
+    codeish = any(w in low for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs"))
+    researchy = bool(_RESEARCHY_PAT.search(text))
+    revision = _is_revision(text) 
+    multipart = words >= 25 and (low.count(" and ") + low.count(";") + low.count(" then ") + text.count("?")) >= 3
 
-    # ---- Lens 1 · Be deliberate about what you ask ----
+    def q(m, cap=40):
+        t = m.group(0) if m else ""
+        return (t[:cap] + "…") if len(t) > cap else t
+
+    rubric = []
+    def dim(key, name, weight, status, note, fix, principle):
+        rubric.append({"key": key, "name": name, "weight": weight, "status": status,
+                       "note": note, "fix": fix, "principle": principle})
+
+    # ---- 1. The goal (30): what does done look like? ----
+    vague = _VAGUE_PAT.search(text)
     if words < 5:
-        add(1, "crit" if not _SCOPE_PAT.search(text) else "warn", "Very short prompt — the model has to guess",
-            "Under-specified asks make the model fill gaps with assumptions, which means wrong answers and re-asks. Retries cost far more than a longer first prompt.",
-            "Say what you want, where to look, and what the result should look like — one clear sentence each.")
-    if _VAGUE_PAT.search(text):
-        add(1, "warn", "Vague instruction (“%s”)" % _VAGUE_PAT.search(text).group(0),
-            "Words like this don't tell the model what “better” means, so it explores broadly — in agentic tools that can mean reading whole folders.",
-            "Name the exact problem and the success condition: “the login button overlaps the nav on mobile — make it match the desktop spacing.”")
-    if _BROAD_PAT.search(text) and not _NEG_PAT.search(text):
-        add(1, "crit", "Unlimited scope (“%s”) with no exclusions" % _BROAD_PAT.search(text).group(0),
-            "“Everything / whole project” invites the tool to read every file it can find. That's the single biggest token explosion in agentic tools.",
-            "Point at the exact files or folders that matter, and say what to skip: “only src/auth/, ignore tests and node_modules.”")
-    if not _SCOPE_PAT.search(text) and words >= 5 and _BROAD_PAT.search(text) is None and any(
-            w in text.lower() for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs")):
-        add(1, "info", "No concrete target named",
-            "Without a named file, folder, function, or link, the tool searches for the target first — and you pay for the search.",
-            "Name the thing: a path, a function, a quoted heading, a URL.")
-    if not _FORMAT_PAT.search(text) and words >= 8:
-        add(1, "warn", "No output size or format specified",
-            "Output tokens are the most expensive kind (about 5× input rate on every Claude tier). Unbounded asks get long answers by default.",
-            "Add one clause: “answer in 5 bullets,” “just the diff,” “one-paragraph summary,” “JSON only.”")
-    if _RESEARCHY_PAT.search(text) and not _ESCAPE_PAT.search(text):
-        add(1, "warn", "No permission to say “I don't know”",
-            "Asked for facts with no way out, a model produces a fluent answer whether or not it knows — the confidence illusion. A made-up answer costs a full retry plus the checking.",
-            "Add one line: “If you are not sure, say so — do not invent sources.” For research, ask for a confidence label on each claim.")
-    if _is_revision(text) and not _SCOPE_PAT.search(text):
-        add(1, "warn", "A revision that never quotes its target",
-            "Asked loosely for a change, a model rewrites the whole thing and can touch sections you never mentioned — you pay for a full regeneration every round.",
-            "Quote the exact snippet, say what is wrong with it, and ask for only that section back.")
-    if est_tokens >= 700:
-        add(1, "warn", "A lot of pasted context (about %s tokens)" % f"{est_tokens:,}",
-            "Past a point, extra context makes answers worse, not better — and every pasted line is billed on every turn that follows. Context is something to filter, not accumulate.",
-            "Paste only the relevant excerpts, or name the files by path and let the tool read what it needs.")
-    if (words >= 12 and _BUILD_PAT.search(text) and not _DONE_PAT.search(text)
-            and not _FORMAT_PAT.search(text)):
-        add(1, "info", "How will it know it is done?",
-            "The strongest lever in a prompt is a clear outcome plus a test for done. Without one the model decides for itself, and you pay for the review loop.",
-            "Add one clause: “Done when <the check you will apply>.”")
-    qs = text.count("?")
-    if qs >= 4:
-        add(1, "info", "%d questions in one prompt" % qs,
-            "Pile-ups get shallow answers for each question, then follow-ups re-send the whole thread again.",
-            "Number the questions, or better: ask the two that matter now, in order of priority.")
+        dim("goal", "The goal", 30, "fail",
+            f"{words} words. The model has to invent the task, the scope and the finish line, and every wrong invention costs a retry.",
+            "Say what you want, where to look, and what the result should look like: one clear sentence each.",
+            "The projection trap: under-specified asks make the model fill gaps with assumptions.")
+    elif vague:
+        dim("goal", "The goal", 30, "fail",
+            f"“{q(vague)}” names neither the exact problem nor what fixed looks like, so the model decides both.",
+            "Name the fault and the finish line: what is wrong, and the one check that proves it is done.",
+            "The projection trap: under-specified asks make the model fill gaps with assumptions.")
+    elif _BUILD_PAT.search(text) and words >= 12 and not _DONE_PAT.search(text) and not _FORMAT_PAT.search(text):
+        dim("goal", "The goal", 30, "mixed",
+            "The task is clear, but nothing says how to tell when it is done, so the model decides when to stop.",
+            "Add one clause: done when <the check you will apply>.",
+            "State the outcome and the test for done, or you pay for the review loop.")
+    else:
+        dim("goal", "The goal", 30, "pass",
+            "The ask is concrete enough to act on without guessing.", "",
+            "The projection trap: avoided.")
 
-    # ---- Lens 2 · Which model you use ----
-    rates = _model_rate_line()
-    light, heavy = _LIGHT_TASK.search(text), _HEAVY_TASK.search(text)
-    if light and not heavy:
-        lr, hr = rates.get("light"), rates.get("heavy")
-        mult = ""
-        if lr and hr and lr["in"]:
-            mult = " — about %.0f× cheaper per input token than an Opus-class model" % (hr["in"] / lr["in"])
-        add(2, "warn", "This looks like a light task (“%s”)" % light.group(0),
-            "Extraction, classification, reformatting and summarizing don't need a frontier model; small models give equivalent results on these.",
-            ("Run it on a Haiku-class model%s. In Claude Code/Cowork, switch model for this task; save the big model for reasoning." % mult))
-    elif heavy:
-        add(2, "info", "Heavy-reasoning task detected (“%s”)" % heavy.group(0),
-            "Multi-constraint work (architecture, cross-file refactors, security review) is where big models earn their price — a cheap model that gets it wrong costs more in retries.",
-            "Use your strongest model, but scope it tightly so its expensive tokens go to thinking, not reading.")
+    # ---- 2. Scope and context (25): where to look, what to skip ----
+    broad = _BROAD_PAT.search(text)
+    if broad and not _NEG_PAT.search(text):
+        dim("scope", "Scope and context", 25, "fail",
+            f"“{q(broad)}” with no exclusions invites the tool to read every file it can find: the single biggest token explosion in agentic tools.",
+            "Point at what matters and say what to skip: only <the folder>, ignore tests and dependencies.",
+            "The cognitive bandwidth trap: context is something to filter, not accumulate.")
+    elif est_tokens >= 700:
+        dim("scope", "Scope and context", 25, "mixed",
+            f"About {est_tokens:,} tokens of pasted material. Past a point, extra context makes answers worse, and every pasted line is billed on every later turn.",
+            "Paste only the relevant excerpts, or name files by path and let the tool read what it needs.",
+            "The cognitive bandwidth trap: minimal necessary context beats a full dump.")
+    elif (codeish or researchy) and not _SCOPE_PAT.search(text):
+        dim("scope", "Scope and context", 25, "mixed",
+            "No file, folder, function, link or quoted name is given, so the tool searches for the target first and you pay for the search.",
+            "Name the thing: a path, a function, a quoted heading, a URL.",
+            "Label the context you provide; do not make the model find it.")
+    else:
+        dim("scope", "Scope and context", 25, "pass",
+            "The prompt says where to look, or does not need to.", "",
+            "The cognitive bandwidth trap: avoided.")
 
-    # ---- Lens 3 · When to start a fresh chat (only when the prompt leans on one) ----
-    rr = _live_reread_share()
-    if _CONT_PAT.search(text):
-        extra = (" On this Mac, %d%% of everything measured is already re-read context." % rr) if (rr is not None and rr >= 70) else ""
-        add(3, "warn", "This prompt leans on a long conversation (“%s”)" % _CONT_PAT.search(text).group(0),
-            "Every message re-sends the entire thread. Asking a one-line question at the bottom of a 100k-token chat costs ~100k input tokens — every time." + extra,
-            "If the thread is long, carry a compact summary into a fresh chat instead (the compact prompt on the Fixes page does this).")
+    # ---- 3. Output contract (20): exact shape and size ----
+    if _FORMAT_PAT.search(text):
+        dim("output", "Output contract", 20, "pass",
+            "The answer's shape and size are pinned down.", "",
+            "Contracts matter: format first, prose second.")
+    elif words >= 8:
+        dim("output", "Output contract", 20, "fail",
+            "No shape or size is specified, and unbounded asks get long answers by default. Output is the most expensive kind of token.",
+            "Add one clause: answer in 5 bullets, just the diff, or one paragraph.",
+            "Specify the output shape: the first beginner move, and the cheapest.")
+    else:
+        dim("output", "Output contract", 20, "na",
+            "Too short to judge separately from the goal.", "",
+            "")
 
-    # ---- Lens 4 · Using tools against each other ----
-    if _SELFCHECK_PAT.search(text):
-        add(4, "info", "Asking a model to check its own work",
-            "Models grade their own answers generously. A second tool catches more for the same tokens.",
-            "Paste the answer into a different tool with “find what's wrong with this” — cheap model is fine for critique.")
+    # ---- 4. Honesty guard (10): permission to say "I don't know" ----
+    if researchy:
+        if _ESCAPE_PAT.search(text):
+            dim("honesty", "Honesty guard", 10, "pass",
+                "The model is allowed to admit uncertainty, so it does not have to bluff.", "",
+                "The confidence illusion: handled.")
+        else:
+            dim("honesty", "Honesty guard", 10, "fail",
+                "Facts are requested with no way out, so a fluent guess beats an honest blank, and a made-up answer costs a full retry plus the checking.",
+                "Add one line: if you are not sure, say so; do not invent sources.",
+                "The confidence illusion: permit unknown, require confidence labels.")
+    else:
+        dim("honesty", "Honesty guard", 10, "na", "No factual claims are being requested.", "", "")
 
-    # ---- score ----
-    score = 100
-    for f in findings:
-        score -= {"crit": 22, "warn": 10, "info": 2}[f["severity"]]
-    score = max(5, min(100, score))
-    # The tightened version starts from what was typed — a lazy user should never
-    # re-enter information the prompt already carries. Bracketed lines appear only
-    # for levers the prompt is actually missing; no gaps means it ships as-is.
+    # ---- 5. Surgical revision (10): quote the target ----
+    if revision:
+        if _SCOPE_PAT.search(text):
+            dim("revision", "Surgical revision", 10, "pass",
+                "The change names its target, so only that section needs to come back.", "",
+                "The revision loop: avoided.")
+        else:
+            dim("revision", "Surgical revision", 10, "fail",
+                "A change is requested without quoting its target, so the model rewrites the whole thing and may touch what you never mentioned. You pay for a full regeneration every round.",
+                "Quote the exact snippet, say what is wrong with it, and ask for only that section back.",
+                "The revision loop: be surgical, patch one section at a time.")
+    else:
+        dim("revision", "Surgical revision", 10, "na", "This is not a revision request.", "", "")
+
+    # ---- 6. Verification (5): a self-check before it answers ----
+    if words >= 12:
+        if _CHECK_PAT.search(text):
+            dim("check", "Verification", 5, "pass",
+                "A check is requested before the answer comes back.", "",
+                "Quality checks: a verification loop in the same turn is nearly free.")
+        else:
+            dim("check", "Verification", 5, "mixed",
+                ("Several asks are stacked and nothing verifies the answer covers them all." if multipart
+                 else "Nothing asks the model to check its answer before showing it."),
+                "Add: before you answer, check it against each point I asked for.",
+                "Quality checks: one line buys a free verification pass.")
+    else:
+        dim("check", "Verification", 5, "na", "Short ask; a self-check would cost more than it saves.", "", "")
+
+    # ---- score: earned share of the applicable weights ----
+    pts = {"pass": 1.0, "mixed": 0.5, "fail": 0.0}
+    applicable = [r for r in rubric if r["status"] != "na"]
+    wsum = sum(r["weight"] for r in applicable) or 1
+    score = int(round(100.0 * sum(r["weight"] * pts[r["status"]] for r in applicable) / wsum))
+    if score >= 85:
+        verdict = "Send it."
+    elif score >= 60:
+        verdict = "Thirty seconds of tightening will pay for itself."
+    else:
+        verdict = "As written, this will burn tokens on guesses and retries."
+
+    # ---- the tightened version: their prompt plus ready default lines for
+    # every dimension that failed, nothing to fill in ----
     core = " ".join(text.split())
     adds = []
-    if _BROAD_PAT.search(text) and not _NEG_PAT.search(text):
+    if broad and not _NEG_PAT.search(text):
         adds.append("Skip anything not needed to answer: tests, generated files, dependency folders, and files you have already read in this session.")
-    elif not _SCOPE_PAT.search(text) and any(
-            w in text.lower() for w in ("code", "file", "project", "folder", "repo", "app", "site", "docs")):
+    elif (codeish or researchy) and not _SCOPE_PAT.search(text) and est_tokens < 700:
         adds.append("Read only the files you need, tell me which ones you read, and ask before reading a whole folder.")
-    if _is_revision(text) and not _SCOPE_PAT.search(text):
+    if revision and not _SCOPE_PAT.search(text):
         adds.append("Return only the changed section, not the whole thing.")
     if not _FORMAT_PAT.search(text) and words >= 8:
         adds.append("Keep the answer short: a list or the diff, no preamble.")
-    if _RESEARCHY_PAT.search(text) and not _ESCAPE_PAT.search(text):
-        adds.append("If you are not sure, say so — do not invent sources.")
-    if (words >= 12 and _BUILD_PAT.search(text) and not _DONE_PAT.search(text)
-            and not _FORMAT_PAT.search(text)):
-        adds.append("End by listing what you did in one line each, so I can check it against what I asked.")
+    if researchy and not _ESCAPE_PAT.search(text):
+        adds.append("If you are not sure, say so; do not invent sources.")
+    if words >= 12 and not _CHECK_PAT.search(text):
+        adds.append("Before you answer, check it against each point I asked for.")
     scaffold = core + (("\n\n" + "\n".join(adds)) if adds else "")
+
     return {"ok": True, "estTokens": est_tokens, "words": words, "score": score,
-            "findings": findings, "scaffold": scaffold, "scaffoldHasAdds": bool(adds),
-            "rates": rates, "rereadShare": rr}
+            "verdict": verdict, "rubric": rubric,
+            "scaffold": scaffold, "scaffoldHasAdds": bool(adds),
+            "rereadShare": _live_reread_share()}
 
 # ---------- server ----------
 THEME_FILE = os.path.join(DATA_DIR, "theme.json")

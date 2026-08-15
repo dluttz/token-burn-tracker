@@ -1655,34 +1655,53 @@ function renderFixes(){
    ======================================================================== */
 function renderCoach(){
   const c=S.coach;
-  const results = (c&&c.ok) ? `<div style="margin-top:var(--s4);display:flex;flex-direction:column;gap:var(--s2);max-width:76ch">
+  let results="";
+  if(c&&c.ok){
+    const chip=st=>st==="pass"?`<span class="tag tag-quiet">Pass</span>`
+      : st==="mixed"?`<span class="tag tag-outline">Tighten</span>`
+      : `<span class="tag tag-accent">Fix</span>`;
+    const rows=(c.rubric||[]).filter(r=>r.status!=="na").map(r=>`
+      <div class="r" style="padding:var(--s3) 0">
+        <div style="display:flex;align-items:baseline;gap:var(--s3);flex-wrap:wrap;row-gap:var(--s1)">
+          ${chip(r.status)}
+          <span style="font-family:var(--font-heading);font-weight:600;font-size:16px">${esc(srv(r.name))}</span>
+          <span class="faint" style="font-size:11.5px;margin-left:auto">${esc(srv(r.principle))}</span>
+        </div>
+        <p style="margin:var(--s1) 0 0;font-size:14px;max-width:74ch">${esc(srv(r.note))}</p>
+        ${r.fix?`<p class="muted" style="margin:var(--s1) 0 0;font-size:13.5px;max-width:74ch"><b>Do:</b> ${esc(srv(r.fix))}</p>`:""}
+      </div>`).join("");
+    const skipped=(c.rubric||[]).filter(r=>r.status==="na").map(r=>srv(r.name));
+    results=`<div style="margin-top:var(--s4);max-width:78ch">
       <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">
-        <span class="tag tag-outline num" style="font-size:13px">Score ${esc(c.score)} of 100</span>
-        <span class="muted num" style="font-size:13px">about ${esc(nfmt(c.estTokens))} tokens as written</span>
+        <span class="tag tag-outline num" style="font-size:14px;padding:5px 12px">Score ${esc(c.score)} of 100</span>
+        <span style="font-size:15px">${esc(srv(c.verdict))}</span>
+        <span class="muted num" style="font-size:12.5px;margin-left:auto">about ${esc(nfmt(c.estTokens))} tokens as written</span>
       </div>
-      ${(c.findings||[]).map(f=>`<p style="margin:0;font-size:14px;border-left:${f.severity==="crit"?"3px solid var(--accent)":"1px solid var(--rule)"};padding-left:var(--s3)">
-        <b>${esc(srv(f.title))}</b> ${esc(srv(f.why))}<br><span class="muted">${esc(srv(f.fix))}</span></p>`).join("")}
-      ${(c.findings||[]).length?"":`<p style="margin:0;font-size:14px;border-left:1px solid var(--rule);padding-left:var(--s3)">Nothing to tighten. Send it as it is.</p>`}
-      ${(c.scaffold&&(c.scaffoldHasAdds||c.scaffold.indexOf("<")>=0))?`<div style="margin-top:var(--s2)">
+      <div class="rowlist" style="margin-top:var(--s3)">${rows}</div>
+      ${skipped.length?`<p class="faint" style="margin:var(--s2) 0 0;font-size:12px">Not relevant to this prompt: ${esc(skipped.join(", "))}.</p>`:""}
+      ${(c.scaffold&&(c.scaffoldHasAdds||c.scaffold.indexOf("<")>=0))?`<div style="margin-top:var(--s4)">
         <div class="muted" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--font-ui);margin-bottom:var(--s1)">The tightened version — your prompt, plus only what is missing</div>
         <div class="cmdbox" style="font-family:var(--font-body);font-size:14px;white-space:pre-wrap;word-break:normal;line-height:1.5">${esc(c.scaffold)}</div>
         <div style="margin-top:var(--s2)"><button class="btn btn-primary" data-act="copy" data-copy="${attr(c.scaffold)}">Copy it</button>
         <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">${(c.scaffold.match(/</g)||[]).length?"Fill anything in brackets, or delete it, and send.":"Copy and send."}</span></div>
       </div>`:""}
-    </div>` : (c&&!c.ok ? `<p class="muted" style="margin-top:var(--s3);font-size:13.5px">${esc(srv(c.error||"Could not read it."))}</p>` : "");
+    </div>`;
+  } else if(c&&!c.ok){
+    results=`<p class="muted" style="margin-top:var(--s3);font-size:13.5px">${esc(srv(c.error||"Could not read it."))}</p>`;
+  }
   return setViewHTML("coach",
     `<h6 class="muted">Before you spend the tokens</h6>
      <h1 style="margin:var(--s3) 0 0">Check a prompt</h1>
-     <p style="max-width:64ch;margin:var(--s3) 0 var(--s6);font-size:16px">Paste what you are about to send. One click and it says what will make the tool read everything and answer long, before it costs anything. It runs on this Mac; the prompt is not stored or sent anywhere.</p>
-     <div style="max-width:76ch">
+     <p style="max-width:64ch;margin:var(--s3) 0 var(--s6);font-size:16px">Paste what you are about to send. It grades the prompt on six things that decide what it will cost, quotes what needs work, and hands back a tightened version. It runs on this Mac; the prompt is not stored or sent anywhere.</p>
+     <div style="max-width:78ch">
        <textarea class="input" id="coach-input" rows="7" style="font-size:15px" placeholder="Paste the prompt you are about to send…"></textarea>
        <div style="display:flex;align-items:center;gap:var(--s3);margin-top:var(--s3);flex-wrap:wrap">
-         <button class="btn btn-primary" data-act="coachrun" ${S.coachBusy?"disabled":""} style="font-size:15px;padding:var(--s2) var(--s4)">${S.coachBusy?"Reading it…":"Read it back to me"}</button>
+         <button class="btn btn-primary" data-act="coachrun" ${S.coachBusy?"disabled":""} style="font-size:15px;padding:var(--s2) var(--s4)">${S.coachBusy?"Grading…":"Grade it"}</button>
          <span class="muted" style="font-size:12.5px">or press Cmd+Enter</span>
        </div>
        ${results}
      </div>
-     <p class="muted" style="max-width:76ch;margin:var(--s8) 0 0;font-size:12px">The checks draw on your own measured usage on this Mac and on public prompting guidance, including Nate B Jones&#39;s prompting frameworks. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`);
+     <p class="muted" style="max-width:78ch;margin:var(--s8) 0 0;font-size:12px">The six dimensions and their grading follow Nate B Jones&#39;s prompting frameworks (the projection trap, the cognitive bandwidth trap, output contracts, the confidence illusion, the revision loop, quality checks), weighted by what each one costs when it goes wrong, plus your own measured usage on this Mac. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`);
 }
 
 /* ===========================================================================
