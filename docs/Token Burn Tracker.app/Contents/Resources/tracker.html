@@ -616,9 +616,9 @@ function chatFileFor(title){
 function toolNote(name){
   return {"Claude Code":"~/.claude/projects/**/*.jsonl, exact per-turn split",
           "Cowork":"the local chat store, exact per-turn split",
-          "Codex":"~/.codex/sessions, one total per session, no split"}[name] || "added by you";
+          "Codex":"~/.codex/sessions, per-turn split from its cumulative counters"}[name] || "added by you";
 }
-function toolExact(name){ return name==="Codex" ? "estimate" : (name==="Claude Code"||name==="Cowork" ? "exact" : "as reported"); }
+function toolExact(name){ return (name==="Claude Code"||name==="Cowork"||name==="Codex") ? "exact" : "as reported"; }
 </script>
 <script>
 /* ===========================================================================
@@ -1084,7 +1084,7 @@ function figsHTML(){
      figure that depends on the split. Saying nothing would read as zero. */
   const lk=leaksNow(), unmeasured=(lk&&+lk.unmeasuredTokens)||0;
   const codexNote = unmeasured>0
-    ? `<p class="subtle" style="margin:var(--s2) 0 0">Codex reports one total per session and cannot be split, so ${esc(fmt(unmeasured))} tokens sit outside the cache-read figure. They are counted in the totals, just not in the split.</p>`
+    ? `<p class="subtle" style="margin:var(--s2) 0 0">${esc(fmt(unmeasured))} tokens come from logs that only report totals (older Codex sessions and custom sources), so they sit outside the cache-read figure. They are counted in the totals, just not in the split.</p>`
     : "";
   return `<div class="figs">${figs.map(f=>`<div class="fig">
     <div class="lab">${esc(f.lab)}</div><div class="val num">${esc(f.val)}</div><div class="sub num">${esc(f.sub)}</div>
@@ -1235,10 +1235,9 @@ function sessionsHTML(){
 
 function renderToday(){
   const acts=buildActions();
-  const el=$("#view-today");
-  el.innerHTML = heroHTML() + (hasHistory()
+  return setViewHTML("today", heroHTML() + (hasHistory()
     ? (`<div id="chartbox">${chartHTML()}</div>` + figsHTML() + reclaimHTML(acts) + ledgerHTML() + standingHTML(acts) + sessionsHTML())
-    : sessionsHTML());
+    : sessionsHTML()));
 }
 </script>
 <script>
@@ -1296,7 +1295,7 @@ function cutChatsHTML(){
       <p class="muted" style="margin-top:var(--s6)">The leak board has not been built yet. It appears once a scan has finished.</p>`;
   }
   const codexNote = (+lk.unmeasuredTokens>0)
-    ? `<p class="note">Codex reports one total per session with no split, so it cannot be measured for re-sent text. ${esc(fmt(lk.unmeasuredTokens))} tokens are not counted on this page. That is not zero, it is unknown.</p>`
+    ? `<p class="note">${esc(fmt(lk.unmeasuredTokens))} tokens come from logs that only report totals (older Codex sessions and custom sources) and cannot be measured for re-sent text, so they are not counted on this page. That is not zero, it is unknown.</p>`
     : "";
 
   if(!(lk.chats||[]).length){
@@ -1404,7 +1403,7 @@ function cutToolsHTML(){
       <thead><tr><th>Tool</th><th>How it is read</th><th style="text-align:right">All time</th>
         <th style="text-align:right">Share</th>${S.showUsd?`<th style="text-align:right">Equivalent</th>`:""}<th>Counts</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <p class="note">Claude Code and Cowork write a per-turn split, so their figures are counts. Codex writes one running total per session, so its figures are estimates: treat them as the shape of the thing, not the measurement.${S.showUsd?" Dollar figures are an API-list-price equivalent, never a bill." : ""}</p>`;
+    <p class="note">All three built-in tools now report a per-turn split; Codex's is derived from the cumulative counters in its own logs. Older Codex sessions that logged only a running total stay unsplit and are listed as such rather than guessed.${S.showUsd?" Dollar figures are an API-list-price equivalent, never a bill." : ""}</p>`;
 }
 
 function cutModelsHTML(){
@@ -1538,18 +1537,18 @@ function renderWhere(){
       ? `The heaviest ${lk.chats.length} chats are ${pctStr(lk.topShare)} of all the text re-sent in this window, and each one is mostly paying for its own past.`
       : "Ranked by how much of its own history each chat re-sends.",
     projects:"Where the work happened, split by the tool that did it.",
-    tools:"Two of these report an exact count. Codex reports a total and no split.",
+    tools:"All three built-in tools report a per-turn split. Older Codex logs and custom sources are the exception, and are listed as unsplit.",
     models:"The same tokens read twice: once by count, once by what they would cost at list prices.",
     days:"Five weeks of days, and the most recent thirty with activity as a line."
   }[S.cut];
   const body={chats:cutChatsHTML, projects:cutProjectsHTML, tools:cutToolsHTML, models:cutModelsHTML, days:cutDaysHTML}[S.cut]();
   const eyebrow = S.cut==="chats" ? (S.leakWin==="all"?"All time":"Last "+S.leakWin+" days") : "All time";
-  $("#view-where").innerHTML =
+  return setViewHTML("where",
     `<h6 class="muted">${esc(eyebrow)}</h6>
      <h1 style="margin:var(--s3) 0 0">Where it went</h1>
      <p style="max-width:64ch;margin:var(--s3) 0 var(--s6);font-size:16px">${esc(insight)}</p>
      <span class="seg">${segs}</span>
-     <div style="margin-top:var(--s2)">${body}</div>`;
+     <div style="margin-top:var(--s2)">${body}</div>`);
 }
 </script>
 <script>
@@ -1628,7 +1627,7 @@ function renderFixes(){
     <div><a class="btn btn-primary" data-act="setview" data-v="coach" href="#coach">Check a prompt now</a></div>
   </div>`;
 
-  $("#view-fixes").innerHTML =
+  return setViewHTML("fixes",
     `<h6 class="muted">Ranked by what it gives back</h6>
      <h1 style="margin:var(--s3) 0 0">Fixes</h1>
      <p style="max-width:64ch;margin:var(--s3) 0 var(--s6);font-size:16px">${esc(intro)}</p>
@@ -1647,7 +1646,7 @@ function renderFixes(){
         </div>
         ${S.open.trivial?`<div class="rowlist" style="margin-top:var(--s3)">${minor.map(fixRowHTML).join("")}</div>`:""}
       </div>`:""}
-     ${coach}`;
+     ${coach}`);
 }
 
 /* ===========================================================================
@@ -1671,7 +1670,7 @@ function renderCoach(){
         <span class="muted" style="font-size:12.5px;margin-left:var(--s2)">${(c.scaffold.match(/</g)||[]).length?"Fill anything in brackets, or delete it, and send.":"Copy and send."}</span></div>
       </div>`:""}
     </div>` : (c&&!c.ok ? `<p class="muted" style="margin-top:var(--s3);font-size:13.5px">${esc(srv(c.error||"Could not read it."))}</p>` : "");
-  $("#view-coach").innerHTML =
+  return setViewHTML("coach",
     `<h6 class="muted">Before you spend the tokens</h6>
      <h1 style="margin:var(--s3) 0 0">Check a prompt</h1>
      <p style="max-width:64ch;margin:var(--s3) 0 var(--s6);font-size:16px">Paste what you are about to send. One click and it says what will make the tool read everything and answer long, before it costs anything. It runs on this Mac; the prompt is not stored or sent anywhere.</p>
@@ -1683,7 +1682,7 @@ function renderCoach(){
        </div>
        ${results}
      </div>
-     <p class="muted" style="max-width:76ch;margin:var(--s8) 0 0;font-size:12px">The checks draw on your own measured usage on this Mac and on public prompting guidance, including Nate B Jones&#39;s prompting frameworks. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`;
+     <p class="muted" style="max-width:76ch;margin:var(--s8) 0 0;font-size:12px">The checks draw on your own measured usage on this Mac and on public prompting guidance, including Nate B Jones&#39;s prompting frameworks. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`);
 }
 
 /* ===========================================================================
@@ -1710,15 +1709,19 @@ function renderSettings(){
       <td style="text-align:right"><button class="btn btn-ghost btn-sm" data-act="rmsource" data-v="${attr(s.name)}">Remove</button></td></tr>`).join("");
 
   const w=S.widget||{};
-  const widgetBlock = w.widgetSourceOk ? `
+  const widgetBlock = `
     <hr class="hr" style="margin:var(--s8) 0 var(--s4)">
     <h4 style="margin:0 0 var(--s2)">Desktop widget</h4>
-    <p style="max-width:66ch;margin:0 0 var(--s3);font-size:14px">A small always-on readout on your desktop, drawn by the free Übersicht app. One click installs Übersicht too if it is missing.</p>
-    <div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">
-      <button class="btn btn-secondary" data-act="widget">${(w.ubersichtInstalled&&w.widgetInstalled)?"Refresh the widget":"Add the desktop widget"}</button>
+    <p style="max-width:66ch;margin:0 0 var(--s3);font-size:14px">A small always-on readout on your desktop, drawn by the free Übersicht app. It updates on its own every 30 seconds whether or not this page is open. One click installs Übersicht too if it is missing.</p>
+    ${w.widgetSourceOk===false
+      ? (S.demo
+        ? `<p class="subtle">This is the sample-data preview, so setup is switched off. In the installed app, one click adds the widget.</p>`
+        : `<p class="subtle">This install is missing the widget source file, so one-click setup is unavailable. <a href="https://raw.githubusercontent.com/dluttz/token-burn-tracker/main/widget/index.jsx" target="_blank" rel="noopener">Get the widget source</a> and drop it into Übersicht's widgets folder as token-burn.widget/index.jsx.</p>`)
+      : `<div style="display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap">
+      <button class="btn btn-primary" data-act="widget">${(w.ubersichtInstalled&&w.widgetInstalled)?"Refresh the desktop widget":"Add it to my desktop"}</button>
       <span class="muted" style="font-size:12.5px">${esc(st("widget"))}</span>
-    </div>
-    ${st("widgetfail")?`<p class="subtle" style="margin-top:var(--s2)">Could not set it up automatically. Install <a href="https://tracesof.net/uebersicht/" target="_blank" rel="noopener">Übersicht</a> and click again, or <a href="/widget.jsx" download="token-burn.jsx">download the widget</a> and drop it into Übersicht's widgets folder.</p>`:""}` : "";
+    </div>`}
+    ${st("widgetfail")?`<p class="subtle" style="margin-top:var(--s2)">Could not set it up automatically. Install <a href="https://tracesof.net/uebersicht/" target="_blank" rel="noopener">Übersicht</a> and click again, or <a href="/widget.jsx" download="token-burn.jsx">download the widget</a> and drop it into Übersicht's widgets folder.</p>`:""}`;
 
   const up=S.update||{};
   const updateBlock = up.outdated ? `
@@ -1727,7 +1730,7 @@ function renderSettings(){
     <p style="max-width:66ch;margin:0 0 var(--s3);font-size:14px">You are on v${esc(up.current)}. v${esc(up.latest)} is out. It updates in place and keeps every setting.</p>
     <button class="btn btn-primary" data-act="showupdate">Update now</button>` : "";
 
-  $("#view-settings").innerHTML =
+  return setViewHTML("settings",
     `<h1 style="margin:0">Settings</h1>
 
      <h4 style="margin:var(--s8) 0 var(--s2)">Your plan's cap</h4>
@@ -1796,7 +1799,7 @@ function renderSettings(){
        Local-first: your prompts and chats never leave your Mac. Anonymous, aggregate usage stats (app version and error counts, never prompt or chat content) help fix crashes; opt out with TOKENBURN_ANALYTICS=off.
        Dollar figures are an API-list-price equivalent, never a bill: subscription plans do not charge per token.
        ${esc(d.generatedAt?("Last read "+String(d.generatedAt).replace("T"," ")+"."):"")}
-     </p>`;
+     </p>`);
 }
 </script>
 <script>
@@ -1829,19 +1832,39 @@ function render(only){
   const v=only||S.view;
   if(only && only!==S.view) return;
   if(typingIn(v) && (v==="settings"||v==="fixes"||v==="coach")) return;
-  if(v==="today") renderToday(), wireChart();
+  if(v==="today"){ if(renderToday()) wireChart(); }
   else if(v==="where") renderWhere();
-  else if(v==="fixes") renderFixes(), restoreForm();
-  else if(v==="coach") renderCoach(), restoreForm();
-  else if(v==="settings") renderSettings(), restoreForm();
+  else if(v==="fixes"){ if(renderFixes()) restoreForm(); }
+  else if(v==="coach"){ if(renderCoach()) restoreForm(); }
+  else if(v==="settings"){ if(renderSettings()) restoreForm(); }
 }
 function renderIfVisible(v){ if(S.view===v) render(v); }
+const LASTHTML={};
+function hasLiveSelection(el){
+  try{
+    const sel=window.getSelection();
+    if(!sel || sel.isCollapsed || !sel.rangeCount) return false;
+    return el.contains(sel.anchorNode) || el.contains(sel.focusNode);
+  }catch(e){ return false; }
+}
+function setViewHTML(v, html){
+  const el=viewEl(v);
+  if(LASTHTML[v]===html) return false;            // nothing changed: leave the DOM alone
+  if(v===S.view && hasLiveSelection(el)){ S.pendingRender=true; return false; }   // never yank a selection
+  LASTHTML[v]=html; el.innerHTML=html;
+  return true;
+}
+document.addEventListener("selectionchange", ()=>{
+  const sel=window.getSelection();
+  if(S.pendingRender && (!sel || sel.isCollapsed)){ S.pendingRender=false; render(); }
+});
 function restoreForm(){
   Object.keys(S.form).forEach(id=>{ const el=document.getElementById(id); if(el && el.value!==S.form[id]) el.value=S.form[id]; });
 }
 function renderChartOnly(){
   const box=$("#chartbox"); if(!box) return;
-  box.innerHTML=chartHTML(); wireChart();
+  if(hasLiveSelection(viewEl("today"))) return;   // a hover redraw never outranks a selection
+  box.innerHTML=chartHTML(); delete LASTHTML.today; wireChart();
 }
 function wireChart(){
   const svg=document.querySelector("#chartbox svg.chartsvg"); if(!svg) return;
@@ -2089,6 +2112,7 @@ async function pollLive(){
     S.live=d;
     const pm=Math.max(0,Math.round((d.burn&&d.burn.perMin)||0));
     if(!S.sampleStart) S.sampleStart=Date.now();
+    S.lastSampleT=Date.now();
     S.liveSamples.push(pm);
     if(S.liveSamples.length>LIVE_SAMPLES_MAX) S.liveSamples=S.liveSamples.slice(-LIVE_SAMPLES_MAX);
     // the page opens on the (already full) 24h view; hop to the live view
@@ -2121,9 +2145,21 @@ async function pollAgents(){
   loadCosts(); loadLeaks(); loadSeries("5d"); loadSeries("1d");
   pollLive(); pollAgents(); pollLeftovers(true);
   apiJSON("/api/widget").then(w=>{ S.widget=w; renderIfVisible("settings"); }).catch(()=>{});
-  setInterval(()=>{ pollLive(); pollAgents(); pollLeftovers(); }, 8000);
-  setInterval(()=>{ loadSeries("5d"); loadSeries("1d"); loadCosts(); }, 60000);
-  setInterval(()=>{ loadLeaks(); loadData(); }, 120000);
+  setInterval(()=>{ if(document.hidden) return; pollLive(); pollAgents(); pollLeftovers(); }, 8000);
+  setInterval(()=>{ if(document.hidden) return; loadSeries("5d"); loadSeries("1d"); loadCosts(); }, 60000);
+  setInterval(()=>{ if(document.hidden) return; loadLeaks(); loadData(); }, 120000);
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden) return;
+    // sampling paused while hidden, so a long gap would splice hour-old
+    // readings next to fresh ones with made-up timestamps: start the live
+    // series over and fall back to the (always complete) 24h view meanwhile
+    if(S.lastSampleT && Date.now()-S.lastSampleT>30000){
+      S.liveSamples=[]; S.sampleStart=0;
+      if(S.spanAuto) S.span="day";
+    }
+    pollLive(); pollAgents(); pollLeftovers(true);
+    loadSeries("5d"); loadSeries("1d"); loadCosts(); loadLeaks(); loadData();
+  });
 })();
 </script>
 </body>

@@ -248,7 +248,7 @@ def analytics_error(where, err):
         pass
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 11   # bumped: entries now carry a per-record input/cache/output split (cost engine)
+CACHE_VERSION = 12   # bumped: Codex entries are now per-turn with a real split from its cumulative counters
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -377,9 +377,16 @@ def claude_entries(path, tool, file_date):
     return entries, titles, tb
 
 def codex_entries(path, file_date, index_map):
+    """Codex rollout logs carry CUMULATIVE counters per token_count event:
+    total_tokens, input_tokens, cached_input_tokens, output_tokens. The deltas
+    between consecutive events are that turn's real usage, so newer Codex
+    sessions get a measured split (fresh input / cache read / output) and
+    join the leak board. Older logs that only carry total_tokens still fall
+    back to unsplit per-day totals, reported as unmeasured, never guessed."""
     cwd = model = first_ts = sid = None
-    prev_total = None
-    by_date = defaultdict(int)   # the cumulative total is distributed across the days it accrued
+    prev = None                       # (total, input, cached, output) cumulative — non-total fields may be None
+    turns = []                        # (date, delta_total, split-or-None) per token_count event
+    unsplit_by_date = defaultdict(int)
     try:
         with open(path, errors="ignore") as f:
             for i, line in enumerate(f):
@@ -400,27 +407,57 @@ def codex_entries(path, file_date, index_map):
                 if not model:
                     model = p.get("model") or d.get("model")
                 if p.get("type") == "token_count" and isinstance(p.get("info"), dict):
-                    tt = (p["info"].get("total_token_usage") or {}).get("total_tokens")
+                    u = p["info"].get("total_token_usage") or {}
+                    tt = u.get("total_tokens")
                     if not isinstance(tt, (int, float)):
                         continue
+                    ti, tc, to = u.get("input_tokens"), u.get("cached_input_tokens"), u.get("output_tokens")
+                    have = all(isinstance(x, (int, float)) for x in (ti, tc, to))
                     ev_date = _ts_date(d.get("timestamp")) or _ts_date(first_ts) or file_date
-                    if prev_total is None:
-                        by_date[ev_date] += tt            # baseline so far → this event's day
-                        prev_total = tt
-                    elif tt > prev_total:
-                        by_date[ev_date] += tt - prev_total   # new tokens → the day they happened
-                        prev_total = tt
+                    if prev is None:
+                        if have:                       # session's first reading = turn 1
+                            fresh = max(0, int(ti) - int(tc))
+                            turns.append((ev_date, int(tt), (fresh, 0, int(tc), int(to))))
+                        else:
+                            unsplit_by_date[ev_date] += int(tt)
+                        prev = (tt, ti if have else None, tc if have else None, to if have else None)
+                    elif tt > prev[0]:
+                        dt_tok = int(tt - prev[0])
+                        if have and prev[1] is not None:
+                            di, dc, do = int(ti - prev[1]), int(tc - prev[2]), int(to - prev[3])
+                            if di >= 0 and dc >= 0 and do >= 0:
+                                turns.append((ev_date, dt_tok, (max(0, di - dc), 0, dc, do)))
+                            else:                      # a counter went backwards: do not guess
+                                unsplit_by_date[ev_date] += dt_tok
+                        else:
+                            unsplit_by_date[ev_date] += dt_tok
+                        prev = (tt, ti if have else prev[1], tc if have else prev[2], to if have else prev[3])
+                    elif tt < prev[0]:
+                        # the counter RESET (compaction / a new sub-session). Re-baseline and
+                        # count the fresh segment's opening reading like a first event — the old
+                        # code kept waiting for the counter to re-pass its old maximum and
+                        # silently dropped everything in between (9.2M real tokens in one
+                        # session on this machine).
+                        if have:
+                            fresh = max(0, int(ti) - int(tc))
+                            turns.append((ev_date, int(tt), (fresh, 0, int(tc), int(to))))
+                        else:
+                            unsplit_by_date[ev_date] += int(tt)
+                        prev = (tt, ti if have else None, tc if have else None, to if have else None)
     except Exception:
         pass
-    total = sum(by_date.values())
+    total = sum(t[1] for t in turns) + sum(unsplit_by_date.values())
     if total > 0:
         sk = "Codex:" + (sid or os.path.basename(path))
-        ents = [[dt, "Codex", model or "codex", cwd or "?", int(tok), sk, path]
-                for dt, tok in by_date.items() if tok > 0]
-        # Codex's rollout logs only expose a cumulative total_tokens per event (no
-        # input/cache/output split), so its share of the token breakdown is left at 0 —
-        # same limitation as everywhere else this file reads Codex usage (see series/live-burn).
-        return ents, {sk: index_map.get(sid or "", "Codex session")}, _empty_breakdown()
+        ents = [[dt, "Codex", model or "codex", cwd or "?", tok, sk, path, list(split)]
+                for dt, tok, split in turns if tok > 0]
+        ents += [[dt, "Codex", model or "codex", cwd or "?", int(tok), sk, path]
+                 for dt, tok in unsplit_by_date.items() if tok > 0]
+        tb = _empty_breakdown()      # the splits feed the file-level breakdown too, so
+        for _dt, _tok, sp in turns:  # Today's cache-read figure agrees with the Models cut
+            tb["input"] += sp[0]; tb["cache_write"] += sp[1]
+            tb["cache_read"] += sp[2]; tb["output"] += sp[3]
+        return ents, {sk: index_map.get(sid or "", "Codex session")}, tb
     return [], {}, _empty_breakdown()
 
 def _sqlite_title_map(db):
@@ -1962,58 +1999,123 @@ def transcript_html(path):
     return head + "".join(body)
 
 # ---------- time series (stock-style ranges) ----------
+_HOURLY = {"files": {}, "hours": {}, "ts": 0.0, "lock": threading.Lock()}
+_HOURLY_KEEP_DAYS = 6
+_HOURLY_SEED_CAP = 16 * 1024 * 1024   # first read of a huge file starts this far from its end
+
+def _hourly_parse(kind, lines, fst, hours_map, label):
+    """Bucket one batch of NEW log lines into per-hour per-tool totals."""
+    if kind == "codex":
+        prev = fst.get("prev")
+        for line in lines:
+            if "total_token_usage" not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            info = ((d.get("payload") or {}).get("info")) or {}
+            tot = (info.get("total_token_usage") or {}).get("total_tokens")
+            if tot is None:
+                continue
+            ts = parse_ts(d.get("timestamp"))
+            if prev is not None and ts:
+                if tot > prev:
+                    v = tot - prev
+                elif tot < prev:
+                    v = tot        # counter reset: the fresh segment's opening reading is new usage
+                else:
+                    v = 0
+                if v:
+                    h = int(ts // 3600) * 3600
+                    hours_map.setdefault(h, {})[label] = hours_map.get(h, {}).get(label, 0) + v
+            prev = tot
+        fst["prev"] = prev
+    else:
+        for line in lines:
+            if '"usage"' not in line:
+                continue
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            ts = parse_ts(d.get("timestamp") or d.get("_audit_timestamp"))
+            if not ts:
+                continue
+            u = ((d.get("message") or {}) or {}).get("usage") or {}
+            v = (u.get("input_tokens", 0) + u.get("output_tokens", 0)
+                 + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0))
+            if v:
+                h = int(ts // 3600) * 3600
+                hours_map.setdefault(h, {})[label] = hours_map.get(h, {}).get(label, 0) + v
+
+def _hourly_refresh():
+    """Keep a rolling per-hour total per tool by reading each log file ONCE
+    past its stored byte offset. Nothing is re-read and nothing is truncated
+    to a tail window, so the heaviest sessions count in full — this is what
+    the headroom ceiling is measured against."""
+    now = time.time()
+    with _HOURLY["lock"]:
+        if now - _HOURLY["ts"] < 20:
+            return
+        _HOURLY["ts"] = now
+        label = {"claude": "Claude Code", "cowork": "Cowork", "codex": "Codex"}
+        horizon = now - _HOURLY_KEEP_DAYS * 86400
+        for kind, p in gather_files():
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            fst = _HOURLY["files"].get(p)
+            if fst is None:
+                fst = {"pos": 0, "prev": None}
+                if st.st_mtime < horizon:
+                    fst["pos"] = st.st_size          # entirely older than any window we serve
+                elif st.st_size > _HOURLY_SEED_CAP:  # bound the very first read of a huge file
+                    fst["pos"] = st.st_size - _HOURLY_SEED_CAP
+                    fst["drop_first"] = True         # the seek lands mid-line; drop the fragment
+                _HOURLY["files"][p] = fst
+            if st.st_size == fst["pos"]:
+                continue
+            if st.st_size < fst["pos"]:              # truncated or rotated: start over
+                fst["pos"], fst["prev"] = 0, None
+            try:
+                with open(p, "rb") as fh:
+                    fh.seek(fst["pos"])
+                    data = fh.read()
+            except OSError:
+                continue
+            if not data:
+                continue
+            nl = data.rfind(b"\n")
+            if nl < 0:
+                continue                             # only a partial line so far; wait for more
+            consumed = nl + 1
+            chunk = data[:consumed]
+            if fst.pop("drop_first", False):
+                cut = chunk.find(b"\n")
+                chunk = chunk[cut + 1:] if cut >= 0 else b""
+            _hourly_parse(kind, chunk.decode("utf-8", "ignore").splitlines(), fst, _HOURLY["hours"], label[kind])
+            fst["pos"] += consumed
+        cutoff = int((now - _HOURLY_KEEP_DAYS * 86400) // 3600) * 3600
+        for h in [h for h in _HOURLY["hours"] if h < cutoff]:
+            _HOURLY["hours"].pop(h, None)
+
 def _series_intraday(hours, bucket_secs):
-    now = time.time(); start = now - hours * 3600
+    _hourly_refresh()
+    now = time.time()
+    start = now - hours * 3600
     nb = max(1, int(round(hours * 3600 / bucket_secs)))
     tools = ["Claude Code", "Cowork", "Codex"]
     data = [{t: 0 for t in tools} for _ in range(nb)]
-    label = {"claude": "Claude Code", "cowork": "Cowork", "codex": "Codex"}
-    def bidx(ts):
-        i = int((ts - start) / bucket_secs)
-        return i if 0 <= i < nb else None
-    for kind, p in gather_files():
-        try: mt = os.path.getmtime(p)
-        except OSError: continue
-        if mt < start - bucket_secs:
-            continue
-        try:
-            with open(p, errors="ignore") as f:
-                lines = deque(f, maxlen=20000)
-        except Exception:
-            continue
-        tl = label[kind]
-        if kind == "codex":
-            prev = None
-            for line in lines:
-                if "total_token_usage" not in line:
-                    continue
-                try: d = json.loads(line)
-                except Exception: continue
-                info = ((d.get("payload") or {}).get("info")) or {}
-                tot = (info.get("total_token_usage") or {}).get("total_tokens")
-                if tot is None:
-                    continue
-                ts = parse_ts(d.get("timestamp"))
-                if prev is not None and tot >= prev and ts:
-                    bi = bidx(ts)
-                    if bi is not None:
-                        data[bi][tl] += tot - prev
-                prev = tot
-        else:
-            for line in lines:
-                if '"usage"' not in line:
-                    continue
-                try: d = json.loads(line)
-                except Exception: continue
-                ts = parse_ts(d.get("timestamp") or d.get("_audit_timestamp"))
-                if not ts:
-                    continue
-                bi = bidx(ts)
-                if bi is None:
-                    continue
-                u = ((d.get("message") or {}) or {}).get("usage") or {}
-                data[bi][tl] += (u.get("input_tokens", 0) + u.get("output_tokens", 0)
-                                 + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0))
+    with _HOURLY["lock"]:
+        items = [(h, dict(tl)) for h, tl in _HOURLY["hours"].items()]
+    for h, tl in items:
+        i = int((h - start) / bucket_secs)
+        if 0 <= i < nb:
+            for t, v in tl.items():
+                if t in data[i]:
+                    data[i][t] += v
     return [{"ts": int((start + i * bucket_secs) * 1000), "tools": data[i]} for i in range(nb)]
 
 def _series_daily(days_back=None):
