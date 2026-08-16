@@ -145,6 +145,10 @@ html[data-theme="soft"] .card{border:none;box-shadow:var(--shadow-sm)}
 .rowlist{border-top:1px solid var(--rule)}
 .rowlist>.r{border-bottom:1px solid var(--rule)}
 .ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-why{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:5px;
+  padding:0;border:1px solid var(--rule);border-radius:50%;background:transparent;font:600 10px/1 inherit;
+  color:inherit;opacity:.5;cursor:help;vertical-align:1px}
+.btn-why:hover{opacity:1;border-color:var(--accent);color:var(--accent)}
 .linky{color:inherit;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
 .linky:hover{text-decoration-color:var(--accent);color:var(--accent)}
 
@@ -479,7 +483,8 @@ function demoLeaks(win){
      resent:28.0e6, turns:120, multiple:2.1, saves:13e6}
   ];
   return {leaks:{window:win, since:null, typical:13.4e6, typicalTurns:54, chats,
-    startup:[], measured:22, totalResent:168e6, topShare:79.2,
+    unitResent:13.4e6, unitTurns:54,
+    startup:[], measured:22, totalResent:168e6, topShare:79.2, topN:5,
     gauge:{p75:28e6,p90:52e6}, unmeasuredTokens:604.5e6},
     window:win, available:["7","30","all"], loading:false};
 }
@@ -785,7 +790,7 @@ function buildActions(){
         id:"compact-chats", group:"worth", live:false, tag:"Leak", src:"Where it went",
         title:"Your longest chats are paying for their own history",
         what:"Re-sent text grows with the square of a chat's length: turn 200 re-sends 200 turns of history. Splitting a long chat into shorter ones cuts the total.",
-        usage:`Across ${winLabel}, the ${lk.chats.length} heaviest chats re-sent ${fmt(lk.totalResent)} tokens between them, ${pctStr(lk.topShare)} of all re-sent text.`,
+        usage:`Across ${winLabel}, the ${topN(lk)} heaviest chats re-sent ${fmt(topResent(lk))} tokens between them, ${pctStr(lk.topShare)} of the ${fmt(lk.totalResent)} re-sent in total.`,
         result:"Carry each thread into a fresh chat with a short handoff note. The originals stay on disk and stay readable.",
         save:saves, savePer:"across "+winLabel,
         cta:"Copy the handoff prompt", doneLab:"Copied",
@@ -1272,9 +1277,47 @@ function leaksNow(){ return (S.leaks && S.leaks.leaks) || null; }
    now always the all-time typical chat, so a badge means the same thing in
    every window. */
 function leakUnit(){
+  const cur=leaksNow();
+  if(cur && +cur.unitResent>0) return {resent:+cur.unitResent, turns:+cur.unitTurns||0};
   const l=(S.leaksAll && S.leaksAll.leaks) || null;
   return {resent:(l&&+l.typical)||0, turns:(l&&+l.typicalTurns)||0};
 }
+/* How many chats the topShare percentage was actually computed over, and their subtotal. The
+   server sends topN so a sentence can never again name one count while the maths used another. */
+function topN(lk){ const n=lk&&+lk.topN; return (n>0?n:Math.min(5,((lk&&lk.chats)||[]).length)); }
+function topResent(lk){ return (((lk&&lk.chats)||[]).slice(0,topN(lk))).reduce((a,c)=>a+(+c.resent||0),0); }
+/* The "?" beside the 1x line. Anyone reading a 367x badge deserves to see the division that
+   produced it, on their own numbers, without opening the source. It also states what the badge
+   does not control for, because a reader who works that out for themselves stops trusting the
+   whole page. */
+function howBadge(u){
+  const perTurn = u.turns>1 ? Math.round(u.resent/(u.turns-1)) : 0;
+  const body =
+    "HOW THE MULTIPLE IS CALCULATED\n\n"+
+    "multiple  =  this chat's re-sent tokens  /  the typical chat's re-sent tokens\n\n"+
+    "Re-sent tokens are cache reads: the conversation so far, sent again on every turn. Providers "+
+    "bill cache reads at about a tenth of the fresh-input rate, so this measures volume, not spend.\n\n"+
+    "The typical chat is the MEDIAN of every chat you have with at least 2 turns, all time. Median "+
+    "rather than average, because one enormous chat would drag an average up and make everything "+
+    "else look fine.\n\n"+
+    "Yours right now: "+fmt(u.resent)+" of re-sent text over "+nfmt(u.turns)+" messages, "+
+    "about "+fmt(perTurn)+" per turn.\n\n"+
+    "WHAT IT DOES NOT CONTROL FOR: length. Re-sent tokens grow with roughly the square of a chat's "+
+    "length, because turn N re-sends N turns of history, until the context window fills and "+
+    "compaction caps it. A long chat therefore scores a high multiple even when each of its turns "+
+    "carries less history than your typical chat does. Check the per-turn figure before calling a "+
+    "chat wasteful rather than simply long.";
+  return `<button type="button" class="btn-why" tabindex="0" aria-label="How the multiple is calculated" title="${attr(body)}">?</button>`;
+}
+
+/* Cache hit ratio: the counterpart to the multiple. The multiple says how BIG a chat is, which
+   is mostly a question about how long it ran. This says how much of it was CHEAP. */
+function cacheHitLine(lk){
+  if(lk==null || lk.cacheHit==null) return "";
+  const v=+lk.cacheHit;
+  return `<p style="max-width:78ch;margin:var(--s3) 0 0;font-size:14px">Across this window, <b>${esc(v)}%</b> of everything sent in came from cache rather than being paid for at the full input rate${(+lk.freshInput>0)?`, against ${esc(fmt(lk.freshInput))} of fresh input`:""}. Cache reads bill at roughly a tenth of fresh input, so a big well-cached chat is cheap and a small chat that keeps missing cache is not. Higher is better here, unlike everything else on this page.</p>`;
+}
+
 function multBadge(resent){
   const u=leakUnit().resent;
   if(!(u>0)) return null;
@@ -1311,7 +1354,7 @@ function cutChatsHTML(){
 
   const u=leakUnit();
   const keyLine = u.resent>0
-    ? `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is your typical chat across all your history: ${esc(fmt(u.resent))} of re-sent text over ${esc(nfmt(u.turns))} messages. The unit is the same in every window, so a chat keeps its badge when you switch windows.</p>`
+    ? `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is your typical chat across all your history: ${esc(fmt(u.resent))} of re-sent text over ${esc(nfmt(u.turns))} messages. The unit is the same in every window, so a chat keeps its badge when you switch windows.${howBadge(u)}</p>${cacheHitLine(lk)}`
     : (lk.typical>0 ? `<p style="max-width:74ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is a typical chat in this window: ${esc(fmt(lk.typical))} of re-sent text across ${esc(nfmt(lk.typicalTurns))} messages.</p>` : "");
 
   const rows=lk.chats.map((c,i)=>{
@@ -1339,6 +1382,7 @@ function cutChatsHTML(){
       <td class="num" style="text-align:right;white-space:nowrap">${esc(nfmt(c.turns||0))}</td>
       <td class="num" style="text-align:right;white-space:nowrap">${esc(fmt(c.resent||0))}</td>
       <td class="num" style="text-align:right;white-space:nowrap">${(()=>{const b=multBadge(c.resent); if(b) return `<span class="tag tag-accent num">${esc(b)}</span>`; return c.multiple!=null?`<span class="tag tag-accent num">${esc(c.multiple)}x</span>`:"";})()}</td>
+      <td class="num" style="text-align:right;white-space:nowrap">${c.cacheHit==null?`<span class="muted">&ndash;</span>`:`<span class="tag ${c.cacheHit>=90?"tag-quiet":"tag-accent"} num" title="${attr(c.cacheHit+"% of what this chat sent in came from cache rather than being paid for at the full input rate. Higher is cheaper. Cache reads bill at about a tenth of fresh input.")}">${esc(c.cacheHit)}%</span>`}</td>
       <td style="text-align:right;white-space:nowrap">${action}</td>
     </tr>`;
   }).join("");
@@ -1347,13 +1391,13 @@ function cutChatsHTML(){
     ${keyLine}
     <div class="tablewrap" style="margin-top:var(--s4)">
       <table class="table fixed">
-        <colgroup><col><col style="width:104px"><col style="width:104px"><col style="width:104px"><col style="width:126px"></colgroup>
+        <colgroup><col><col style="width:98px"><col style="width:98px"><col style="width:92px"><col style="width:84px"><col style="width:120px"></colgroup>
         <thead><tr><th>Chat</th><th style="text-align:right">Messages</th><th style="text-align:right">Re-sent</th>
-          <th style="text-align:right">vs typical</th><th></th></tr></thead>
+          <th style="text-align:right">vs typical</th><th style="text-align:right">Cached</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript. Each window lists the eight heaviest chats that were last <i>active</i> in it, so a chat can make the cut in a short window and miss it in a longer one where bigger chats crowd it out.</p>
+    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript. Each window lists the ${esc(nfmt((lk.chats||[]).length))} heaviest chats that were last <i>active</i> in it, so a chat can make the cut in a short window and miss it in a longer one where bigger chats crowd it out.</p>
     ${codexNote}`;
 }
 
@@ -1534,7 +1578,7 @@ function renderWhere(){
   const lk=leaksNow();
   const insight={
     chats: lk&&(lk.chats||[]).length
-      ? `The heaviest ${lk.chats.length} chats are ${pctStr(lk.topShare)} of all the text re-sent in this window, and each one is mostly paying for its own past.`
+      ? `The heaviest ${topN(lk)} chats are ${pctStr(lk.topShare)} of all the text re-sent in this window, and each one is mostly paying for its own past.`
       : "Ranked by how much of its own history each chat re-sends.",
     projects:"Where the work happened, split by the tool that did it.",
     tools:"All three built-in tools report a per-turn split. Older Codex logs and custom sources are the exception, and are listed as unsplit.",
@@ -1701,7 +1745,7 @@ function renderCoach(){
        </div>
        ${results}
      </div>
-     <p class="muted" style="max-width:78ch;margin:var(--s8) 0 0;font-size:12px">The six dimensions and their grading follow Nate B Jones&#39;s prompting frameworks (the projection trap, the cognitive bandwidth trap, output contracts, the confidence illusion, the revision loop, quality checks), weighted by what each one costs when it goes wrong, plus your own measured usage on this Mac. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`);
+     <p class="muted" style="max-width:78ch;margin:var(--s8) 0 0;font-size:12px">Six of the eight dimensions implement the prompt issues Nate B Jones set out in <a class="linky" href="https://www.youtube.com/watch?v=KwQpPbLEBMA" target="_blank" rel="noopener">Here&#39;s How to Solve the 6 Top Prompt Issues&#39;</a> (6 Nov 2025): the projection trap, the cognitive bandwidth trap, the planning illusion, the confidence illusion, the revision loop and the drift problem. The output contract and verification are ours, not his. Each is weighted by what it costs when it goes wrong, against your own measured usage on this Mac. Analysis runs locally; the prompt is never stored or sent anywhere.</p>`);
 }
 
 /* ===========================================================================

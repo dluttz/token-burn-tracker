@@ -863,8 +863,28 @@ def _split_savings(resent, turns, typical_turns):
         return 0
     return int(min(resent * 0.90, resent - (resent / k)))
 
+def _cache_hit(read, write, fresh):
+    """Cache hit ratio: of everything the model had to read on the way in, what share came from
+    cache rather than being paid for at the full input rate.
+
+        hit = cache_read / (cache_read + cache_write + fresh_input)
+
+    This is the metric Anthropic, OpenAI, Langfuse, Braintrust and Arize all expose, and it is
+    the honest counterpart to the x badge. The badge answers "is this chat big", which is mostly
+    a question about length. This answers "is this chat WASTEFUL", which is what a bill responds
+    to. Cache reads bill at roughly a tenth of fresh input, so a chat re-sending an enormous but
+    well-cached history is cheap, while a short chat that keeps missing cache is expensive. High
+    is good here, unlike every other number on this page. Returns None when there is nothing to
+    divide, so the UI can say "not measured" instead of printing a confident 0%."""
+    denom = (read or 0) + (write or 0) + (fresh or 0)
+    if denom <= 0:
+        return None
+    return round(100.0 * (read or 0) / denom, 1)
+
 def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, resolve,
-                unmeasured=0, top=8, since=None, window="all"):
+                unmeasured=0, top=8, since=None, window="all",
+                unit_resent=None, unit_turns=None, top_share_n=5,
+                sess_fresh=None, sess_cachew=None):
     """One window of the leak board. `since` is an ISO date; a chat belongs to the window if it was
     last ACTIVE in it. Windowing by activity (not by slicing turns) is what lets the board show
     improvement: split a monster chat today and it ages out of the 7- and 30-day views, while the
@@ -874,13 +894,22 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
     keys = [sk for sk in sess_resent
             if sess_turns.get(sk, 0) >= 2 and (not since or (sess_date.get(sk) or "") >= since)]
     empty = {"window": window, "since": since, "typical": 0, "typicalTurns": 0, "chats": [],
-             "startup": [], "measured": 0, "totalResent": 0, "topShare": 0,
+             "startup": [], "measured": 0, "totalResent": 0, "topShare": 0, "topN": 0,
+             "cacheHit": None, "freshInput": 0, "cacheWrite": 0,
+             "unitResent": unit_resent or 0, "unitTurns": unit_turns or 0,
              "gauge": {"p75": 0, "p90": 0}, "unmeasuredTokens": unmeasured}
     if not keys:
         return empty
     resents = sorted(sess_resent[sk] for sk in keys)
-    typical = _pctile(resents, 0.5)                              # the "1x" the UI keys off
+    typical = _pctile(resents, 0.5)                 # this window's own median, shown as context
     typical_turns = max(1, _pctile(sorted(sess_turns[sk] for sk in keys), 0.5))
+    # The 1x unit. A window median is the wrong unit for a badge: the 30-day window here holds
+    # only heavy chats, so its median is 256.9M while the all-time median is 3.1M, and the same
+    # chat reads 4.5x or 367x depending on which you divide by. The caller passes the all-time
+    # figures so a badge means one thing everywhere. Falling back to this window's own median
+    # keeps a standalone call working, it just makes the badge window-relative again.
+    unit_r = unit_resent if (unit_resent or 0) > 0 else typical
+    unit_t = unit_turns if (unit_turns or 0) > 0 else typical_turns
     chats = []
     today = datetime.date.today().isoformat()
     for sk in sorted(keys, key=lambda k: -sess_resent[k])[:top]:
@@ -894,8 +923,11 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
                       "file": fpath, "date": date, "when": when, "lastActive": date,
                       "active": bool(date) and date >= today,
                       "resent": r, "turns": n,
-                      "multiple": round(r / float(typical), 1) if typical else None,
-                      "saves": _split_savings(r, n, typical_turns)})
+                      "multiple": round(r / float(unit_r), 1) if unit_r else None,
+                      "perTurn": int(r / max(1, n - 1)),
+                      "cacheHit": _cache_hit(r, (sess_cachew or {}).get(sk, 0),
+                                             (sess_fresh or {}).get(sk, 0)),
+                      "saves": _split_savings(r, n, unit_t)})
     # Entry fee: what a chat costs before the first word — the tool's own instructions, CLAUDE.md,
     # and one description per connected tool. Median (not mean) so a single big opening read can't
     # skew it, and only for projects with enough chats to be fair.
@@ -913,10 +945,22 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
         startup.append({"project": pj, "median": med, "chats": len(vals), "paid": med * len(vals)})
     startup.sort(key=lambda x: -x["paid"])
     total = sum(resents)
+    # topShare is the share held by the heaviest `top_share_n`, which is deliberately smaller than
+    # the `top` rows we list: the point of the sentence is that a handful of chats dominate, and
+    # quoting it over every listed row would say "8 of our 11 chats are 99.8%", which is nothing.
+    # topN ships with it so the copy can never again name a different count than the maths used.
+    n_share = max(1, min(int(top_share_n), len(chats)))
+    _w_read  = sum(sess_resent[sk] for sk in keys)
+    _w_write = sum((sess_cachew or {}).get(sk, 0) for sk in keys)
+    _w_fresh = sum((sess_fresh  or {}).get(sk, 0) for sk in keys)
     return {"window": window, "since": since,
+            "cacheHit": _cache_hit(_w_read, _w_write, _w_fresh),
+            "freshInput": _w_fresh, "cacheWrite": _w_write,
             "typical": typical, "typicalTurns": typical_turns, "chats": chats,
+            "unitResent": unit_r, "unitTurns": unit_t,
             "startup": startup[:8], "measured": len(keys), "totalResent": total,
-            "topShare": round(100.0 * sum(c["resent"] for c in chats[:5]) / total, 1) if total else 0,
+            "topN": n_share,
+            "topShare": round(100.0 * sum(c["resent"] for c in chats[:n_share]) / total, 1) if total else 0,
             "gauge": {"p75": _pctile(resents, 0.75), "p90": _pctile(resents, 0.90)},
             "unmeasuredTokens": unmeasured}
 
@@ -933,6 +977,8 @@ def aggregate(entries, titles):
     sess_meta = {}
     sess_turns = defaultdict(int)    # assistant turns that reported a token split
     sess_resent = defaultdict(int)   # cache_read per session = the conversation re-sent
+    sess_fresh  = defaultdict(int)   # fresh input tokens: text the cache did NOT cover
+    sess_cachew = defaultdict(int)   # cache writes: paying to put something INTO the cache
     sess_startup = {}                # that session's FIRST turn: the entry fee before you type
     sess_proj = {}
     unmeasured = 0                   # tokens from sources with no split (Codex / custom)
@@ -972,6 +1018,8 @@ def aggregate(entries, titles):
                 um[i] += split[i]; udm[i] += split[i]; utm[i] += split[i]
             sess_turns[sk] += 1
             sess_resent[sk] += split[2]
+            sess_fresh[sk]  += split[0]
+            sess_cachew[sk] += split[1]
             if sk not in sess_startup:          # entries arrive in file order, so this is turn 1
                 sess_startup[sk] = split[1] or split[0]
             sess_proj.setdefault(sk, sp)
@@ -1025,10 +1073,20 @@ def aggregate(entries, titles):
     try:
         _t = datetime.date.today()
         leaks = {}
-        for _w, _days in (("7", 7), ("30", 30), ("all", None)):
+        # Build all-time FIRST and reuse its median as the 1x unit for every window, so a chat
+        # keeps its badge and its estimated saving when you switch windows.
+        _all = build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date,
+                           _resolve, unmeasured, since=None, window="all",
+                           sess_fresh=sess_fresh, sess_cachew=sess_cachew)
+        _ur, _ut = _all.get("typical") or 0, _all.get("typicalTurns") or 0
+        _all["unitResent"], _all["unitTurns"] = _ur, _ut
+        leaks["all"] = _all
+        for _w, _days in (("7", 7), ("30", 30)):
             _since = (_t - datetime.timedelta(days=_days - 1)).isoformat() if _days else None
             leaks[_w] = build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date,
-                                    _resolve, unmeasured, since=_since, window=_w)
+                                    _resolve, unmeasured, since=_since, window=_w,
+                                    unit_resent=_ur, unit_turns=_ut,
+                                    sess_fresh=sess_fresh, sess_cachew=sess_cachew)
     except Exception:
         leaks = None   # a leaks failure must never take the dashboard down
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
@@ -2405,6 +2463,18 @@ _DONE_PAT = re.compile(r"\b(done when|success|criteria|acceptance|should (look|r
 _CHECK_PAT = re.compile(r"\b(before (you )?(answer|reply|finish|show)|double[- ]check|verify|"
                         r"check (that|your|it|each)|make sure|confirm (that|it))\b", re.I)
 _BUILD_PAT = re.compile(r"\b(build|write|create|make|implement|draft|design|plan|produce|generate)\b", re.I)
+# The planning illusion (Nate B Jones, item 3): a complex task collapses itself into one shot
+# instead of being staged. Detected as "did the prompt ask for a plan, or for steps, first".
+_PLAN_PAT = re.compile(r"\b(plan (it|this|first)|step[- ]by[- ]step|outline (first|the)|"
+                       r"break (it|this) (down|into)|in stages|one (step|section|part) at a time|"
+                       r"before (you )?(start|begin|write|build)|propose an approach|"
+                       r"first .{0,20}\bthen\b)\b", re.I)
+# The drift problem (Nate B Jones, item 5): same input, different output. A prompt resists drift
+# when it anchors to something stable — a named format, an example to match, or an explicit rule.
+_ANCHOR_PAT = re.compile(r"\b(exactly like|same (format|structure|style|shape) as|match the|"
+                         r"follow (the|this) (format|template|structure|example|convention)|"
+                         r"use (the|this) (template|example|schema)|template|schema|"
+                         r"for example[:,]|e\.g\.[:,]?|like this[:,]|as follows[:,])", re.I)
 
 def _live_reread_share():
     """% of all tracked tokens that are cache reads (context being re-sent), from real data."""
@@ -2430,12 +2500,20 @@ def _model_rate_line():
     return out
 
 def analyze_prompt(text):
-    """Grade a prompt on six dimensions, each tied to a detectable signal and a
-    named principle from Nate B Jones's prompting work (the projection trap,
-    the cognitive bandwidth trap, output contracts, the confidence illusion,
-    the revision loop, quality checks). Each graded dimension quotes what the
-    prompt actually says, criticises it plainly, and hands back one ready
-    sentence that fixes it. Runs locally; the prompt is never stored or sent."""
+    """Grade a prompt on eight dimensions, each tied to a detectable signal.
+
+    Six implement the prompt issues Nate B Jones set out in "Here's How to Solve
+    the 6 Top Prompt Issues (Based on 29,000 OpenAI Comments)", 6 Nov 2025,
+    https://www.youtube.com/watch?v=KwQpPbLEBMA : the projection trap (goal),
+    the cognitive bandwidth trap (scope), the planning illusion (staging), the
+    confidence illusion (honesty), the revision loop (revision) and the drift
+    problem (consistency). Two more are ours and are not his: the output
+    contract and verification. Keep that line intact — crediting him for the
+    two we added would be as wrong as not crediting him for the six.
+
+    Each graded dimension quotes what the prompt actually says, criticises it
+    plainly, and hands back one ready sentence that fixes it. Runs locally; the
+    prompt is never stored or sent."""
     text = (text or "").strip()
     if not text:
         return {"ok": False, "error": "empty prompt"}
@@ -2459,59 +2537,59 @@ def analyze_prompt(text):
     # ---- 1. The goal (30): what does done look like? ----
     vague = _VAGUE_PAT.search(text)
     if words < 5:
-        dim("goal", "The goal", 30, "fail",
+        dim("goal", "The goal", 25, "fail",
             f"{words} words. The model has to invent the task, the scope and the finish line, and every wrong invention costs a retry.",
             "Say what you want, where to look, and what the result should look like: one clear sentence each.",
             "The projection trap: under-specified asks make the model fill gaps with assumptions.")
     elif vague:
-        dim("goal", "The goal", 30, "fail",
+        dim("goal", "The goal", 25, "fail",
             f"“{q(vague)}” names neither the exact problem nor what fixed looks like, so the model decides both.",
             "Name the fault and the finish line: what is wrong, and the one check that proves it is done.",
             "The projection trap: under-specified asks make the model fill gaps with assumptions.")
     elif _BUILD_PAT.search(text) and words >= 12 and not _DONE_PAT.search(text) and not _FORMAT_PAT.search(text):
-        dim("goal", "The goal", 30, "mixed",
+        dim("goal", "The goal", 25, "mixed",
             "The task is clear, but nothing says how to tell when it is done, so the model decides when to stop.",
             "Add one clause: done when <the check you will apply>.",
             "State the outcome and the test for done, or you pay for the review loop.")
     else:
-        dim("goal", "The goal", 30, "pass",
+        dim("goal", "The goal", 25, "pass",
             "The ask is concrete enough to act on without guessing.", "",
             "The projection trap: avoided.")
 
     # ---- 2. Scope and context (25): where to look, what to skip ----
     broad = _BROAD_PAT.search(text)
     if broad and not _NEG_PAT.search(text):
-        dim("scope", "Scope and context", 25, "fail",
+        dim("scope", "Scope and context", 20, "fail",
             f"“{q(broad)}” with no exclusions invites the tool to read every file it can find: the single biggest token explosion in agentic tools.",
             "Point at what matters and say what to skip: only <the folder>, ignore tests and dependencies.",
             "The cognitive bandwidth trap: context is something to filter, not accumulate.")
     elif est_tokens >= 700:
-        dim("scope", "Scope and context", 25, "mixed",
+        dim("scope", "Scope and context", 20, "mixed",
             f"About {est_tokens:,} tokens of pasted material. Past a point, extra context makes answers worse, and every pasted line is billed on every later turn.",
             "Paste only the relevant excerpts, or name files by path and let the tool read what it needs.",
             "The cognitive bandwidth trap: minimal necessary context beats a full dump.")
     elif (codeish or researchy) and not _SCOPE_PAT.search(text):
-        dim("scope", "Scope and context", 25, "mixed",
+        dim("scope", "Scope and context", 20, "mixed",
             "No file, folder, function, link or quoted name is given, so the tool searches for the target first and you pay for the search.",
             "Name the thing: a path, a function, a quoted heading, a URL.",
             "Label the context you provide; do not make the model find it.")
     else:
-        dim("scope", "Scope and context", 25, "pass",
+        dim("scope", "Scope and context", 20, "pass",
             "The prompt says where to look, or does not need to.", "",
             "The cognitive bandwidth trap: avoided.")
 
     # ---- 3. Output contract (20): exact shape and size ----
     if _FORMAT_PAT.search(text):
-        dim("output", "Output contract", 20, "pass",
+        dim("output", "Output contract", 14, "pass",
             "The answer's shape and size are pinned down.", "",
             "Contracts matter: format first, prose second.")
     elif words >= 8:
-        dim("output", "Output contract", 20, "fail",
+        dim("output", "Output contract", 14, "fail",
             "No shape or size is specified, and unbounded asks get long answers by default. Output is the most expensive kind of token.",
             "Add one clause: answer in 5 bullets, just the diff, or one paragraph.",
             "Specify the output shape: the first beginner move, and the cheapest.")
     else:
-        dim("output", "Output contract", 20, "na",
+        dim("output", "Output contract", 14, "na",
             "Too short to judge separately from the goal.", "",
             "")
 
@@ -2532,31 +2610,74 @@ def analyze_prompt(text):
     # ---- 5. Surgical revision (10): quote the target ----
     if revision:
         if _SCOPE_PAT.search(text):
-            dim("revision", "Surgical revision", 10, "pass",
+            dim("revision", "Surgical revision", 8, "pass",
                 "The change names its target, so only that section needs to come back.", "",
                 "The revision loop: avoided.")
         else:
-            dim("revision", "Surgical revision", 10, "fail",
+            dim("revision", "Surgical revision", 8, "fail",
                 "A change is requested without quoting its target, so the model rewrites the whole thing and may touch what you never mentioned. You pay for a full regeneration every round.",
                 "Quote the exact snippet, say what is wrong with it, and ask for only that section back.",
                 "The revision loop: be surgical, patch one section at a time.")
     else:
-        dim("revision", "Surgical revision", 10, "na", "This is not a revision request.", "", "")
+        dim("revision", "Surgical revision", 8, "na", "This is not a revision request.", "", "")
 
     # ---- 6. Verification (5): a self-check before it answers ----
     if words >= 12:
         if _CHECK_PAT.search(text):
-            dim("check", "Verification", 5, "pass",
+            dim("check", "Verification", 4, "pass",
                 "A check is requested before the answer comes back.", "",
                 "Quality checks: a verification loop in the same turn is nearly free.")
         else:
-            dim("check", "Verification", 5, "mixed",
+            dim("check", "Verification", 4, "mixed",
                 ("Several asks are stacked and nothing verifies the answer covers them all." if multipart
                  else "Nothing asks the model to check its answer before showing it."),
                 "Add: before you answer, check it against each point I asked for.",
                 "Quality checks: one line buys a free verification pass.")
     else:
-        dim("check", "Verification", 5, "na", "Short ask; a self-check would cost more than it saves.", "", "")
+        dim("check", "Verification", 4, "na", "Short ask; a self-check would cost more than it saves.", "", "")
+
+    # ---- 7. The planning illusion (14): a big build that was never staged ----
+    # Nate B Jones, item 3 of six: "complex tasks will often collapse themselves into one shot".
+    # A one-shot attempt at a large build is the most expensive failure on this list, because the
+    # rework is a second full generation rather than a patch.
+    if _BUILD_PAT.search(text) and (multipart or words >= 40):
+        if _PLAN_PAT.search(text):
+            dim("planning", "Staging", 14, "pass",
+                "The work is staged rather than demanded in one shot.", "",
+                "The planning illusion: avoided.")
+        else:
+            dim("planning", "Staging", 14, "fail",
+                "This asks for a large piece of work in a single shot. Complex tasks collapse into "
+                "one attempt, and when the attempt misses you pay to generate the whole thing again.",
+                "Add: plan the approach first and wait for me to confirm before you build it.",
+                "The planning illusion: stage the work, do not one-shot it.")
+    else:
+        dim("planning", "Staging", 14, "na",
+            "Small enough to answer in one pass.", "", "")
+
+    # ---- 8. The drift problem (5): nothing anchors the answer, so runs disagree ----
+    # Nate B Jones, item 5 of six: "same inputs and different outputs".
+    if words >= 20 and _BUILD_PAT.search(text):
+        if _ANCHOR_PAT.search(text) or _FORMAT_PAT.search(text):
+            dim("drift", "Consistency", 5, "pass",
+                "An example or fixed shape is given, so repeat runs land in the same place.", "",
+                "The drift problem: anchored.")
+        else:
+            dim("drift", "Consistency", 5, "mixed",
+                "Nothing here pins the answer to a fixed shape, so asking twice gives two different "
+                "answers and you pay to reconcile them.",
+                "Add one anchor: follow the same structure as the example below, or name the format.",
+                "The drift problem: anchor the output or runs will disagree.")
+    else:
+        dim("drift", "Consistency", 5, "na",
+            "Too short for run-to-run drift to cost anything.", "", "")
+
+    # ---- order for reading: what is actually graded first, heaviest first, and every
+    # n/a dimension last. Dimensions are appended in detection order, which is not the order
+    # a person wants to read them in. Sorting here keeps display order stable no matter where
+    # a new dimension gets inserted in the code above. ----
+    _rank = {"fail": 0, "mixed": 1, "pass": 2, "na": 3}
+    rubric.sort(key=lambda r: (3 if r["status"] == "na" else 0, -r["weight"], _rank[r["status"]]))
 
     # ---- score: earned share of the applicable weights ----
     pts = {"pass": 1.0, "mixed": 0.5, "fail": 0.0}
