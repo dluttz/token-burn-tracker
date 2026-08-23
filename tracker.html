@@ -474,16 +474,17 @@ function demoLeaks(win){
   const dstr=k=>{ const d=new Date(now); d.setDate(now.getDate()-k); return isoLocal(d); };
   const chats=[
     {title:"Q3 board deck: outline and speaker notes", titleSource:"app", project:"work/q3-board-deck", tool:"Cowork",
-     file:null, date:dstr(1), when:dstr(9)+"T15:47", lastActive:dstr(1), active:false, resent:66.0e6, turns:214, multiple:4.9, saves:41e6},
+     file:null, date:dstr(1), when:dstr(9)+"T15:47", lastActive:dstr(1), active:false, resent:66.0e6, turns:214,
+     perTurn:308411, share:39.3, cacheHit:96.4, bloat:2.31, saves:41e6},
     {title:"Refactor the billing reconciliation into async jobs so the nightly close stops timing out", titleSource:"firstMessage",
      project:"code/billing-service", tool:"Claude Code", file:null, date:dstr(0), when:dstr(4)+"T09:12", lastActive:dstr(0), active:true,
-     resent:41.0e6, turns:168, multiple:3.1, saves:24e6},
+     resent:41.0e6, turns:168, perTurn:245508, share:24.4, cacheHit:71.2, bloat:1.12, saves:24e6},
     {title:"fix the flaky auth suite, it fails on retry sessions about one run in five", titleSource:"firstMessage",
      project:"code/auth-service", tool:"Codex", file:null, date:dstr(3), when:dstr(6)+"T11:03", lastActive:dstr(3), active:false,
-     resent:28.0e6, turns:120, multiple:2.1, saves:13e6}
+     resent:28.0e6, turns:120, perTurn:235294, share:16.7, cacheHit:88.0, bloat:null, saves:13e6}
   ];
-  return {leaks:{window:win, since:null, typical:13.4e6, typicalTurns:54, chats,
-    unitResent:13.4e6, unitTurns:54,
+  return {leaks:{window:win, since:null, chats, splitTarget:50,
+    cacheHit:86.9, freshInput:14.2e6, cacheWrite:11.0e6,
     startup:[], measured:22, totalResent:168e6, topShare:79.2, topN:5,
     gauge:{p75:28e6,p90:52e6}, unmeasuredTokens:604.5e6},
     window:win, available:["7","30","all"], loading:false};
@@ -1272,57 +1273,62 @@ function chatSub(c){
   return parts.join(" · ");
 }
 function leaksNow(){ return (S.leaks && S.leaks.leaks) || null; }
-/* The 1x unit. Using the selected window's own median made the same chat read
-   4.9x in one window and 145x in another, which looked like a bug. The unit is
-   now always the all-time typical chat, so a badge means the same thing in
-   every window. */
-function leakUnit(){
-  const cur=leaksNow();
-  if(cur && +cur.unitResent>0) return {resent:+cur.unitResent, turns:+cur.unitTurns||0};
-  const l=(S.leaksAll && S.leaksAll.leaks) || null;
-  return {resent:(l&&+l.typical)||0, turns:(l&&+l.typicalTurns)||0};
-}
-/* How many chats the topShare percentage was actually computed over, and their subtotal. The
-   server sends topN so a sentence can never again name one count while the maths used another. */
+/* How many chats the topShare percentage was computed over, and their subtotal. The server sends
+   topN so a sentence can never name one count while the maths used another. */
 function topN(lk){ const n=lk&&+lk.topN; return (n>0?n:Math.min(5,((lk&&lk.chats)||[]).length)); }
 function topResent(lk){ return (((lk&&lk.chats)||[]).slice(0,topN(lk))).reduce((a,c)=>a+(+c.resent||0),0); }
-/* The "?" beside the 1x line. Anyone reading a 367x badge deserves to see the division that
-   produced it, on their own numbers, without opening the source. It also states what the badge
-   does not control for, because a reader who works that out for themselves stops trusting the
-   whole page. */
-function howBadge(u){
-  const perTurn = u.turns>1 ? Math.round(u.resent/(u.turns-1)) : 0;
+
+/* There is no "vs typical" multiple any more. Dividing a chat's re-sent tokens by the median
+   chat's produced a number that mostly measured LENGTH: re-sent text grows with roughly the
+   square of a conversation's length, so the longest chat won the badge even when each of its
+   turns carried less history than a short one. It also moved depending on which window you had
+   loaded. What replaced it: share of the window, cache hit ratio, and reply bloat, none of which
+   change meaning with how long a chat ran. */
+function whyColumns(lk){
   const body =
-    "HOW THE MULTIPLE IS CALCULATED\n\n"+
-    "multiple  =  this chat's re-sent tokens  /  the typical chat's re-sent tokens\n\n"+
-    "Re-sent tokens are cache reads: the conversation so far, sent again on every turn. Providers "+
-    "bill cache reads at about a tenth of the fresh-input rate, so this measures volume, not spend.\n\n"+
-    "The typical chat is the MEDIAN of every chat you have with at least 2 turns, all time. Median "+
-    "rather than average, because one enormous chat would drag an average up and make everything "+
-    "else look fine.\n\n"+
-    "Yours right now: "+fmt(u.resent)+" of re-sent text over "+nfmt(u.turns)+" messages, "+
-    "about "+fmt(perTurn)+" per turn.\n\n"+
-    "WHAT IT DOES NOT CONTROL FOR: length. Re-sent tokens grow with roughly the square of a chat's "+
-    "length, because turn N re-sends N turns of history, until the context window fills and "+
-    "compaction caps it. A long chat therefore scores a high multiple even when each of its turns "+
-    "carries less history than your typical chat does. Check the per-turn figure before calling a "+
-    "chat wasteful rather than simply long.";
-  return `<button type="button" class="btn-why" tabindex="0" aria-label="How the multiple is calculated" title="${attr(body)}">?</button>`;
+    "WHAT EACH COLUMN MEANS\n\n"+
+    "SHARE\n  this chat's re-sent tokens / all re-sent tokens in this window\n"+
+    "  Bounded, sums to 100%, and answers the only question worth asking: is this chat big "+
+    "enough to be worth acting on.\n\n"+
+    "CACHED\n  cache_read / (cache_read + cache_write + fresh_input)\n"+
+    "  Of everything sent in, how much came from cache instead of being paid for at the full "+
+    "input rate. Cache reads bill at roughly a tenth of fresh input, so a big well-cached chat "+
+    "is cheap and a small chat that keeps missing cache is not. HIGH IS GOOD, unlike every "+
+    "other number here. This is the metric Anthropic, OpenAI, Langfuse, Braintrust and Arize "+
+    "all expose.\n\n"+
+    "BLOAT\n  mean reply length over the last third of turns / the first third\n"+
+    "  How much longer the answers got as the conversation ran on. Above about 1.5 means the "+
+    "replies are growing without the questions getting harder, which is the most replicated "+
+    "published signal that a conversation has gone off the rails. Laban et al. (ICLR 2026) "+
+    "measured derailed answers running 20 to 300% longer than the same task asked in one turn, "+
+    "and found more verbose runs scored worse on five of six tasks. Reproduced in ASE 2026, "+
+    "where solutions grew from 9 to 79 lines over eight turns while pass rates fell.\n\n"+
+    "RE-SENT is cache reads: the conversation so far, sent again on every turn. It grows with "+
+    "roughly the square of a chat's length until compaction caps it, which is why raw size is a "+
+    "poor guide to waste on its own.\n\n"+
+    "What was removed: a multiple against the median chat. It ranked by length rather than "+
+    "waste, and it changed value depending on which window had loaded.";
+  return `<button type="button" class="btn-why" tabindex="0" aria-label="What each column means" title="${attr(body)}">?</button>`;
 }
 
-/* Cache hit ratio: the counterpart to the multiple. The multiple says how BIG a chat is, which
-   is mostly a question about how long it ran. This says how much of it was CHEAP. */
+/* Cache hit ratio: the honest counterpart to raw size. Size says how BIG a chat is, which is
+   mostly a question about how long it ran. This says how much of it was CHEAP. */
 function cacheHitLine(lk){
   if(lk==null || lk.cacheHit==null) return "";
   const v=+lk.cacheHit;
-  return `<p style="max-width:78ch;margin:var(--s3) 0 0;font-size:14px">Across this window, <b>${esc(v)}%</b> of everything sent in came from cache rather than being paid for at the full input rate${(+lk.freshInput>0)?`, against ${esc(fmt(lk.freshInput))} of fresh input`:""}. Cache reads bill at roughly a tenth of fresh input, so a big well-cached chat is cheap and a small chat that keeps missing cache is not. Higher is better here, unlike everything else on this page.</p>`;
+  return `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">Across this window, <b>${esc(v)}%</b> of everything sent in came from cache rather than being paid for at the full input rate${(+lk.freshInput>0)?`, against ${esc(fmt(lk.freshInput))} of fresh input`:""}. Higher is better here, unlike everything else on this page. ${whyColumns(lk)}</p>`;
 }
 
-function multBadge(resent){
-  const u=leakUnit().resent;
-  if(!(u>0)) return null;
-  const m=resent/u;
-  return (m>=9.95 ? String(Math.round(m)) : (Math.round(m*10)/10).toFixed(1).replace(/\.0$/,"")) + "x";
+/* Reply bloat badge. Below 6 turns the server sends null, because thirds of a five-turn chat
+   are not a measurement. */
+function bloatBadge(v){
+  if(v==null) return `<span class="muted">&ndash;</span>`;
+  const n=+v;
+  const cls = n>=1.5 ? "tag-accent" : "tag-quiet";
+  const tip = n>=1.5
+    ? `Replies in the last third of this chat are ${n.toFixed(2)}x as long as in the first third. Growing answers without harder questions is the strongest published sign a conversation has drifted.`
+    : `Reply length is steady across this chat (${n.toFixed(2)}x). No drift signal.`;
+  return `<span class="tag ${cls} num" title="${attr(tip)}">${esc(n.toFixed(2))}x</span>`;
 }
 
 function cutChatsHTML(){
@@ -1352,10 +1358,7 @@ function cutChatsHTML(){
       </div>${codexNote}`;
   }
 
-  const u=leakUnit();
-  const keyLine = u.resent>0
-    ? `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is your typical chat across all your history: ${esc(fmt(u.resent))} of re-sent text over ${esc(nfmt(u.turns))} messages. The unit is the same in every window, so a chat keeps its badge when you switch windows.${howBadge(u)}</p>${cacheHitLine(lk)}`
-    : (lk.typical>0 ? `<p style="max-width:74ch;margin:var(--s4) 0 0;font-size:14px">One <b>1x</b> is a typical chat in this window: ${esc(fmt(lk.typical))} of re-sent text across ${esc(nfmt(lk.typicalTurns))} messages.</p>` : "");
+  const keyLine = cacheHitLine(lk);
 
   const rows=lk.chats.map((c,i)=>{
     const id="leak-"+i;
@@ -1381,8 +1384,9 @@ function cutChatsHTML(){
       </td>
       <td class="num" style="text-align:right;white-space:nowrap">${esc(nfmt(c.turns||0))}</td>
       <td class="num" style="text-align:right;white-space:nowrap">${esc(fmt(c.resent||0))}</td>
-      <td class="num" style="text-align:right;white-space:nowrap">${(()=>{const b=multBadge(c.resent); if(b) return `<span class="tag tag-accent num">${esc(b)}</span>`; return c.multiple!=null?`<span class="tag tag-accent num">${esc(c.multiple)}x</span>`:"";})()}</td>
+      <td class="num" style="text-align:right;white-space:nowrap">${c.share==null?`<span class="muted">&ndash;</span>`:`<span class="tag tag-accent num" title="${attr(c.share+"% of all re-sent tokens in this window. "+fmt(c.perTurn)+" per turn.")}">${esc(c.share)}%</span>`}</td>
       <td class="num" style="text-align:right;white-space:nowrap">${c.cacheHit==null?`<span class="muted">&ndash;</span>`:`<span class="tag ${c.cacheHit>=90?"tag-quiet":"tag-accent"} num" title="${attr(c.cacheHit+"% of what this chat sent in came from cache rather than being paid for at the full input rate. Higher is cheaper. Cache reads bill at about a tenth of fresh input.")}">${esc(c.cacheHit)}%</span>`}</td>
+      <td class="num" style="text-align:right;white-space:nowrap">${bloatBadge(c.bloat)}</td>
       <td style="text-align:right;white-space:nowrap">${action}</td>
     </tr>`;
   }).join("");
@@ -1391,9 +1395,9 @@ function cutChatsHTML(){
     ${keyLine}
     <div class="tablewrap" style="margin-top:var(--s4)">
       <table class="table fixed">
-        <colgroup><col><col style="width:98px"><col style="width:98px"><col style="width:92px"><col style="width:84px"><col style="width:120px"></colgroup>
+        <colgroup><col><col style="width:92px"><col style="width:92px"><col style="width:76px"><col style="width:78px"><col style="width:78px"><col style="width:116px"></colgroup>
         <thead><tr><th>Chat</th><th style="text-align:right">Messages</th><th style="text-align:right">Re-sent</th>
-          <th style="text-align:right">vs typical</th><th style="text-align:right">Cached</th><th></th></tr></thead>
+          <th style="text-align:right">Share</th><th style="text-align:right">Cached</th><th style="text-align:right">Bloat</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>

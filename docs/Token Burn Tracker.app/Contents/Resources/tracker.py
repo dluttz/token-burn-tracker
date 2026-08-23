@@ -852,16 +852,54 @@ def _pctile(vals, p):
         return 0
     return vals[min(len(vals) - 1, int(round((len(vals) - 1) * p)))]
 
-def _split_savings(resent, turns, typical_turns):
+SPLIT_TARGET_TURNS = 50   # the chunk size the saving estimate assumes. A declared constant, not
+                          # a statistic derived from your own data: a number you can argue with
+                          # beats a median you cannot see.
+
+def _split_savings(resent, turns, target_turns=SPLIT_TARGET_TURNS):
     """Re-sent text grows with the SQUARE of turn count — turn N re-sends N turns of history — so
-    splitting a chat into k parts cuts the total to roughly 1/k. k here is how many typical-length
-    chats this one is worth. Capped at 90% so the headline figure can never overpromise."""
-    if resent <= 0 or turns <= 0 or typical_turns <= 0:
+    splitting a chat into k parts cuts the total to roughly 1/k. k is how many chunks of
+    target_turns this chat would become. Capped at 90% so the figure can never overpromise.
+
+    This used to divide by the median chat's turn count, which made the same chat show different
+    savings in different windows and hid the assumption inside a statistic. A fixed, stated
+    chunk size is both stable and arguable."""
+    if resent <= 0 or turns <= 0 or target_turns <= 0:
         return 0
-    k = turns / float(typical_turns)
+    k = turns / float(target_turns)
     if k <= 1:
         return 0
     return int(min(resent * 0.90, resent - (resent / k)))
+
+def _reply_bloat(out_seq):
+    """Reply bloat: how much longer the assistant's answers got as the conversation ran on.
+
+        bloat = mean(output tokens, last third of turns) / mean(output tokens, first third)
+
+    This is the most replicated observable signal that a conversation has gone wrong. Laban et al.
+    (ICLR 2026 Outstanding Paper, arXiv:2505.06120) found answers in derailed multi-turn
+    conversations run 20-300% longer than the same task answered in one turn, and that even the
+    ones that eventually get there are 27% longer. They also found that across five of six tasks
+    the more verbose runs scored worse. Independently reproduced by Regression Accumulation in
+    Multi-Turn LLM Programming Conversations (ASE 2026, arXiv:2607.01855), where reference
+    solutions grew from 9 to 79 lines across eight turns while pass rates fell.
+
+    Output tokens per turn are already in the logs, so this costs nothing to compute and needs no
+    transcript text. It is a RATIO OF MEANS rather than a running total on purpose: The
+    Autocorrelation Blind Spot (arXiv:2604.14414) showed 42% of turn-level findings built on
+    cumulative metrics fail cluster-robust correction, while differential ones survive.
+
+    Returns None below 6 turns, where thirds are too small to mean anything."""
+    seq = [o for o in (out_seq or []) if o is not None]
+    n = len(seq)
+    if n < 6:
+        return None
+    k = n // 3
+    first = sum(seq[:k]) / float(k)
+    last = sum(seq[-k:]) / float(k)
+    if first <= 0:
+        return None
+    return round(last / first, 2)
 
 def _cache_hit(read, write, fresh):
     """Cache hit ratio: of everything the model had to read on the way in, what share came from
@@ -883,8 +921,7 @@ def _cache_hit(read, write, fresh):
 
 def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, resolve,
                 unmeasured=0, top=8, since=None, window="all",
-                unit_resent=None, unit_turns=None, top_share_n=5,
-                sess_fresh=None, sess_cachew=None):
+                top_share_n=5, sess_fresh=None, sess_cachew=None, sess_out_seq=None):
     """One window of the leak board. `since` is an ISO date; a chat belongs to the window if it was
     last ACTIVE in it. Windowing by activity (not by slicing turns) is what lets the board show
     improvement: split a monster chat today and it ages out of the 7- and 30-day views, while the
@@ -893,23 +930,21 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
     # A chat needs a back-and-forth to leak: a single-turn chat has no history to re-send.
     keys = [sk for sk in sess_resent
             if sess_turns.get(sk, 0) >= 2 and (not since or (sess_date.get(sk) or "") >= since)]
-    empty = {"window": window, "since": since, "typical": 0, "typicalTurns": 0, "chats": [],
+    empty = {"window": window, "since": since, "chats": [],
              "startup": [], "measured": 0, "totalResent": 0, "topShare": 0, "topN": 0,
              "cacheHit": None, "freshInput": 0, "cacheWrite": 0,
-             "unitResent": unit_resent or 0, "unitTurns": unit_turns or 0,
+             "splitTarget": SPLIT_TARGET_TURNS,
              "gauge": {"p75": 0, "p90": 0}, "unmeasuredTokens": unmeasured}
     if not keys:
         return empty
     resents = sorted(sess_resent[sk] for sk in keys)
-    typical = _pctile(resents, 0.5)                 # this window's own median, shown as context
-    typical_turns = max(1, _pctile(sorted(sess_turns[sk] for sk in keys), 0.5))
-    # The 1x unit. A window median is the wrong unit for a badge: the 30-day window here holds
-    # only heavy chats, so its median is 256.9M while the all-time median is 3.1M, and the same
-    # chat reads 4.5x or 367x depending on which you divide by. The caller passes the all-time
-    # figures so a badge means one thing everywhere. Falling back to this window's own median
-    # keeps a standalone call working, it just makes the badge window-relative again.
-    unit_r = unit_resent if (unit_resent or 0) > 0 else typical
-    unit_t = unit_turns if (unit_turns or 0) > 0 else typical_turns
+    # There is deliberately no "typical chat" here any more. Dividing a chat's re-sent tokens by
+    # the median chat's produced a badge that mostly measured LENGTH: re-sent text grows with
+    # roughly the square of a conversation's length, so the longest chat wins the badge even when
+    # each of its turns is carrying less history than a short one. On this machine the chat with
+    # the most turns of any carried 30% LESS history per turn than the median and still ranked
+    # fifth worst. The board now reports share of the window, cost efficiency (cache hit) and
+    # reply bloat, all of which mean the same thing regardless of how long a chat ran.
     chats = []
     today = datetime.date.today().isoformat()
     for sk in sorted(keys, key=lambda k: -sess_resent[k])[:top]:
@@ -923,11 +958,11 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
                       "file": fpath, "date": date, "when": when, "lastActive": date,
                       "active": bool(date) and date >= today,
                       "resent": r, "turns": n,
-                      "multiple": round(r / float(unit_r), 1) if unit_r else None,
                       "perTurn": int(r / max(1, n - 1)),
                       "cacheHit": _cache_hit(r, (sess_cachew or {}).get(sk, 0),
                                              (sess_fresh or {}).get(sk, 0)),
-                      "saves": _split_savings(r, n, unit_t)})
+                      "bloat": _reply_bloat((sess_out_seq or {}).get(sk)),
+                      "saves": _split_savings(r, n)})
     # Entry fee: what a chat costs before the first word — the tool's own instructions, CLAUDE.md,
     # and one description per connected tool. Median (not mean) so a single big opening read can't
     # skew it, and only for projects with enough chats to be fair.
@@ -953,11 +988,12 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
     _w_read  = sum(sess_resent[sk] for sk in keys)
     _w_write = sum((sess_cachew or {}).get(sk, 0) for sk in keys)
     _w_fresh = sum((sess_fresh  or {}).get(sk, 0) for sk in keys)
-    return {"window": window, "since": since,
+    for c in chats:
+        c["share"] = round(100.0 * c["resent"] / total, 1) if total else None
+    return {"window": window, "since": since, "splitTarget": SPLIT_TARGET_TURNS,
             "cacheHit": _cache_hit(_w_read, _w_write, _w_fresh),
             "freshInput": _w_fresh, "cacheWrite": _w_write,
-            "typical": typical, "typicalTurns": typical_turns, "chats": chats,
-            "unitResent": unit_r, "unitTurns": unit_t,
+            "chats": chats,
             "startup": startup[:8], "measured": len(keys), "totalResent": total,
             "topN": n_share,
             "topShare": round(100.0 * sum(c["resent"] for c in chats[:n_share]) / total, 1) if total else 0,
@@ -979,6 +1015,7 @@ def aggregate(entries, titles):
     sess_resent = defaultdict(int)   # cache_read per session = the conversation re-sent
     sess_fresh  = defaultdict(int)   # fresh input tokens: text the cache did NOT cover
     sess_cachew = defaultdict(int)   # cache writes: paying to put something INTO the cache
+    sess_out_seq = defaultdict(list) # output tokens per turn, IN ORDER: the reply-bloat signal
     sess_startup = {}                # that session's FIRST turn: the entry fee before you type
     sess_proj = {}
     unmeasured = 0                   # tokens from sources with no split (Codex / custom)
@@ -1020,6 +1057,7 @@ def aggregate(entries, titles):
             sess_resent[sk] += split[2]
             sess_fresh[sk]  += split[0]
             sess_cachew[sk] += split[1]
+            sess_out_seq[sk].append(split[3])
             if sk not in sess_startup:          # entries arrive in file order, so this is turn 1
                 sess_startup[sk] = split[1] or split[0]
             sess_proj.setdefault(sk, sp)
@@ -1075,18 +1113,12 @@ def aggregate(entries, titles):
         leaks = {}
         # Build all-time FIRST and reuse its median as the 1x unit for every window, so a chat
         # keeps its badge and its estimated saving when you switch windows.
-        _all = build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date,
-                           _resolve, unmeasured, since=None, window="all",
-                           sess_fresh=sess_fresh, sess_cachew=sess_cachew)
-        _ur, _ut = _all.get("typical") or 0, _all.get("typicalTurns") or 0
-        _all["unitResent"], _all["unitTurns"] = _ur, _ut
-        leaks["all"] = _all
-        for _w, _days in (("7", 7), ("30", 30)):
+        for _w, _days in (("all", None), ("7", 7), ("30", 30)):
             _since = (_t - datetime.timedelta(days=_days - 1)).isoformat() if _days else None
             leaks[_w] = build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date,
                                     _resolve, unmeasured, since=_since, window=_w,
-                                    unit_resent=_ur, unit_turns=_ut,
-                                    sess_fresh=sess_fresh, sess_cachew=sess_cachew)
+                                    sess_fresh=sess_fresh, sess_cachew=sess_cachew,
+                                    sess_out_seq=sess_out_seq)
     except Exception:
         leaks = None   # a leaks failure must never take the dashboard down
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
