@@ -871,6 +871,8 @@ def _split_savings(resent, turns, target_turns=SPLIT_TARGET_TURNS):
         return 0
     return int(min(resent * 0.90, resent - (resent / k)))
 
+REPLY_FLOOR_TOKENS = 40   # below this a turn is a tool acknowledgement, not an answer
+
 def _reply_bloat(out_seq):
     """Reply bloat: how much longer the assistant's answers got as the conversation ran on.
 
@@ -889,14 +891,23 @@ def _reply_bloat(out_seq):
     Autocorrelation Blind Spot (arXiv:2604.14414) showed 42% of turn-level findings built on
     cumulative metrics fail cluster-robust correction, while differential ones survive.
 
-    Returns None below 6 turns, where thirds are too small to mean anything."""
-    seq = [o for o in (out_seq or []) if o is not None]
+    Two things this has to survive that a chat benchmark never sees. Agent harnesses spend most
+    of their turns on tool calls whose output is a few tokens, so a mean is dominated by how many
+    tools ran rather than by how long the answers got: on this machine one 2,319-turn chat scored
+    0.07, a fourteen-fold "shrink" that was really just a tail of tool acknowledgements. So the
+    tiny turns are filtered out and the middle of what remains is taken with a median, not a mean.
+
+    Returns None below 6 substantive replies, where thirds are too small to mean anything."""
+    seq = [o for o in (out_seq or []) if o is not None and o >= REPLY_FLOOR_TOKENS]
     n = len(seq)
     if n < 6:
         return None
     k = n // 3
-    first = sum(seq[:k]) / float(k)
-    last = sum(seq[-k:]) / float(k)
+    def med(v):
+        v = sorted(v)
+        m = len(v) // 2
+        return float(v[m]) if len(v) % 2 else (v[m - 1] + v[m]) / 2.0
+    first, last = med(seq[:k]), med(seq[-k:])
     if first <= 0:
         return None
     return round(last / first, 2)
@@ -984,7 +995,12 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
     # the `top` rows we list: the point of the sentence is that a handful of chats dominate, and
     # quoting it over every listed row would say "8 of our 11 chats are 99.8%", which is nothing.
     # topN ships with it so the copy can never again name a different count than the maths used.
+    # topShare only says something when the window holds meaningfully more chats than it names.
+    # With 6 measured chats "the heaviest 5 are 99.9%" is arithmetic, not insight, so it is
+    # suppressed rather than printed as though it were a finding.
     n_share = max(1, min(int(top_share_n), len(chats)))
+    if len(keys) < n_share * 2:
+        n_share = 0
     _w_read  = sum(sess_resent[sk] for sk in keys)
     _w_write = sum((sess_cachew or {}).get(sk, 0) for sk in keys)
     _w_fresh = sum((sess_fresh  or {}).get(sk, 0) for sk in keys)
@@ -996,7 +1012,8 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
             "chats": chats,
             "startup": startup[:8], "measured": len(keys), "totalResent": total,
             "topN": n_share,
-            "topShare": round(100.0 * sum(c["resent"] for c in chats[:n_share]) / total, 1) if total else 0,
+            "topShare": (round(100.0 * sum(c["resent"] for c in chats[:n_share]) / total, 1)
+                         if (total and n_share) else None),
             "gauge": {"p75": _pctile(resents, 0.75), "p90": _pctile(resents, 0.90)},
             "unmeasuredTokens": unmeasured}
 

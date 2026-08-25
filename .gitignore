@@ -50,3 +50,4 @@ _aifeed_debug/
 
 # Approved design specs for the paid tier. Local reference only, not published.
 docs/design/
+.commitmsg.tmp

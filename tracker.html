@@ -791,7 +791,9 @@ function buildActions(){
         id:"compact-chats", group:"worth", live:false, tag:"Leak", src:"Where it went",
         title:"Your longest chats are paying for their own history",
         what:"Re-sent text grows with the square of a chat's length: turn 200 re-sends 200 turns of history. Splitting a long chat into shorter ones cuts the total.",
-        usage:`Across ${winLabel}, the ${topN(lk)} heaviest chats re-sent ${fmt(topResent(lk))} tokens between them, ${pctStr(lk.topShare)} of the ${fmt(lk.totalResent)} re-sent in total.`,
+        usage: lk.topShare==null
+          ? `Across ${winLabel}, ${fmt(lk.totalResent)} of re-sent text across ${nfmt(lk.measured)} chat${lk.measured===1?"":"s"}.`
+          : `Across ${winLabel}, the ${topN(lk)} heaviest chats re-sent ${fmt(topResent(lk))} tokens between them, ${pctStr(lk.topShare)} of the ${fmt(lk.totalResent)} re-sent in total.`,
         result:"Carry each thread into a fresh chat with a short handoff note. The originals stay on disk and stay readable.",
         save:saves, savePer:"across "+winLabel,
         cta:"Copy the handoff prompt", doneLab:"Copied",
@@ -1296,7 +1298,10 @@ function whyColumns(lk){
     "is cheap and a small chat that keeps missing cache is not. HIGH IS GOOD, unlike every "+
     "other number here. This is the metric Anthropic, OpenAI, Langfuse, Braintrust and Arize "+
     "all expose.\n\n"+
-    "BLOAT\n  mean reply length over the last third of turns / the first third\n"+
+    "BLOAT\n  median reply length, last third of substantive turns / first third\n"+
+    "  Turns under 40 output tokens are tool calls rather than answers and are excluded, and "+
+    "the middle is taken rather than the average, because an agent run is mostly tool traffic "+
+    "and a mean just counts how many tools ran.\n"+
     "  How much longer the answers got as the conversation ran on. Above about 1.5 means the "+
     "replies are growing without the questions getting harder, which is the most replicated "+
     "published signal that a conversation has gone off the rails. Laban et al. (ICLR 2026) "+
@@ -1322,7 +1327,7 @@ function cacheHitLine(lk){
 /* Reply bloat badge. Below 6 turns the server sends null, because thirds of a five-turn chat
    are not a measurement. */
 function bloatBadge(v){
-  if(v==null) return `<span class="muted">&ndash;</span>`;
+  if(v==null) return `<span class="muted" title="Not enough substantive replies in this chat to compare. Turns under 40 output tokens are tool calls, not answers, and are left out.">&ndash;</span>`;
   const n=+v;
   const cls = n>=1.5 ? "tag-accent" : "tag-quiet";
   const tip = n>=1.5
@@ -1581,9 +1586,11 @@ function renderWhere(){
   const segs=cuts.map(c=>`<label class="seg-opt"><input type="radio" name="tbcut" ${S.cut===c[0]?"checked":""} data-act="setcut" data-v="${c[0]}">${c[1]}</label>`).join("");
   const lk=leaksNow();
   const insight={
-    chats: lk&&(lk.chats||[]).length
-      ? `The heaviest ${topN(lk)} chats are ${pctStr(lk.topShare)} of all the text re-sent in this window, and each one is mostly paying for its own past.`
-      : "Ranked by how much of its own history each chat re-sends.",
+    chats: !(lk&&(lk.chats||[]).length)
+      ? "Ranked by how much of its own history each chat re-sends."
+      : (lk.topShare==null
+        ? `Only ${nfmt(lk.measured)} chat${lk.measured===1?"":"s"} in this window had a real back and forth, so a share of the top few would just be arithmetic. Each one is mostly paying for its own past.`
+        : `The heaviest ${topN(lk)} chats are ${pctStr(lk.topShare)} of all the text re-sent in this window, and each one is mostly paying for its own past.`),
     projects:"Where the work happened, split by the tool that did it.",
     tools:"All three built-in tools report a per-turn split. Older Codex logs and custom sources are the exception, and are listed as unsplit.",
     models:"The same tokens read twice: once by count, once by what they would cost at list prices.",
