@@ -90,7 +90,7 @@ a{color:var(--accent);text-underline-offset:3px}
 .rescanchip .sp{width:11px;height:11px;border:1.5px solid var(--rule);border-top-color:var(--accent);border-radius:50%;animation:tbspin .8s linear infinite;flex:none}
 .demopill{font-size:11.5px;padding:3px 10px;border-radius:var(--r-md);border:1px solid var(--accent);color:var(--accent);white-space:nowrap}
 
-main{max-width:1000px;margin:0 auto;padding:var(--s8) var(--s8) 96px}
+main{max-width:1240px;margin:0 auto;padding:var(--s8) var(--s8) 96px}
 .view{display:none}
 .view.on{display:block}
 
@@ -145,10 +145,41 @@ html[data-theme="soft"] .card{border:none;box-shadow:var(--shadow-sm)}
 .rowlist{border-top:1px solid var(--rule)}
 .rowlist>.r{border-bottom:1px solid var(--rule)}
 .ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btn-why{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:5px;
-  padding:0;border:1px solid var(--rule);border-radius:50%;background:transparent;font:600 10px/1 inherit;
-  color:inherit;opacity:.5;cursor:help;vertical-align:1px}
-.btn-why:hover{opacity:1;border-color:var(--accent);color:var(--accent)}
+sup.fn{font-size:9px;font-weight:700;opacity:.55;margin-left:1px;vertical-align:super;letter-spacing:0}
+.fnote{display:grid;grid-template-columns:14px 1fr;gap:2px var(--s3);align-items:baseline;margin-top:var(--s3)}
+.fnote .n{font-size:11px;font-weight:700;opacity:.55;font-variant-numeric:tabular-nums}
+.fnote .f{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;opacity:.75}
+/* --- leak board rows --- */
+.lrow{display:flex;align-items:center;gap:var(--s8);padding:var(--s6) 0;border-bottom:1px solid var(--rule)}
+.lboard{margin-top:var(--s7);border-top:1px solid var(--rule)}
+.lrow:last-of-type{border-bottom:none}
+.lmain{flex:1 1 auto;min-width:0}
+.lnums{flex:0 0 auto;display:flex;align-items:center;gap:30px;padding-left:var(--s6)}
+.lnums .big{font-variant-numeric:tabular-nums;font-size:21px;line-height:1.1;letter-spacing:-.02em;white-space:nowrap;text-align:right}
+.lnums>div:first-child{min-width:196px}
+.lnums .bigsub{font-size:11px;text-align:right;margin-top:1px;white-space:nowrap}
+.stat{display:flex;flex-direction:column;align-items:flex-end;min-width:66px}
+.stat .k{font-size:9px;text-transform:uppercase;letter-spacing:.07em;opacity:.5;font-weight:700;white-space:nowrap}
+.stat .v{font-size:13.5px;font-variant-numeric:tabular-nums;font-weight:600;margin-top:1px}
+/* horizontal, swipeable tool strip */
+.tools{display:flex;gap:5px;overflow-x:auto;overflow-y:hidden;padding:1px 0 4px;margin-top:8px;
+  scrollbar-width:thin;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.tools::-webkit-scrollbar{height:5px}
+.tools::-webkit-scrollbar-thumb{background:var(--rule);border-radius:3px}
+.tools .tl{flex:0 0 auto;scroll-snap-align:start;display:inline-flex;align-items:baseline;gap:4px;
+  padding:2px 8px;border:1px solid var(--rule);border-radius:999px;font-size:11px;cursor:help;white-space:nowrap;opacity:.8}
+.tools .tl:hover{border-color:var(--accent);color:var(--accent);opacity:1}
+.tools .tl b{font-variant-numeric:tabular-nums;font-weight:700;opacity:.55;font-size:10px}
+@media (max-width:900px){.lrow{flex-wrap:wrap}.lnums{width:100%;justify-content:flex-end}}
+/* Real tooltips. Native title= is slow, never fires on touch, and in testing simply did not
+   appear at all. This one lives on <body> so it escapes the tool strip's overflow clipping,
+   which would cut off any absolutely-positioned tooltip inside that scroller. */
+#tt{position:fixed;z-index:9999;max-width:340px;padding:9px 11px;border-radius:8px;
+  background:#1f1f1f;color:#fff;font-size:12.5px;line-height:1.45;
+  box-shadow:0 6px 24px rgba(0,0,0,.22);pointer-events:none;opacity:0;transition:opacity .09s;
+  white-space:pre-wrap}
+#tt.on{opacity:1}
+[data-tip]{cursor:help}
 .linky{color:inherit;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
 .linky:hover{text-decoration-color:var(--accent);color:var(--accent)}
 
@@ -1280,40 +1311,31 @@ function leaksNow(){ return (S.leaks && S.leaks.leaks) || null; }
 function topN(lk){ const n=lk&&+lk.topN; return (n>0?n:Math.min(5,((lk&&lk.chats)||[]).length)); }
 function topResent(lk){ return (((lk&&lk.chats)||[]).slice(0,topN(lk))).reduce((a,c)=>a+(+c.resent||0),0); }
 
-/* There is no "vs typical" multiple any more. Dividing a chat's re-sent tokens by the median
-   chat's produced a number that mostly measured LENGTH: re-sent text grows with roughly the
-   square of a conversation's length, so the longest chat won the badge even when each of its
-   turns carried less history than a short one. It also moved depending on which window you had
-   loaded. What replaced it: share of the window, cache hit ratio, and reply bloat, none of which
-   change meaning with how long a chat ran. */
-function whyColumns(lk){
-  const body =
-    "WHAT EACH COLUMN MEANS\n\n"+
-    "SHARE\n  this chat's re-sent tokens / all re-sent tokens in this window\n"+
-    "  Bounded, sums to 100%, and answers the only question worth asking: is this chat big "+
-    "enough to be worth acting on.\n\n"+
-    "CACHED\n  cache_read / (cache_read + cache_write + fresh_input)\n"+
-    "  Of everything sent in, how much came from cache instead of being paid for at the full "+
-    "input rate. Cache reads bill at roughly a tenth of fresh input, so a big well-cached chat "+
-    "is cheap and a small chat that keeps missing cache is not. HIGH IS GOOD, unlike every "+
-    "other number here. This is the metric Anthropic, OpenAI, Langfuse, Braintrust and Arize "+
-    "all expose.\n\n"+
-    "BLOAT\n  median reply length, last third of substantive turns / first third\n"+
-    "  Turns under 40 output tokens are tool calls rather than answers and are excluded, and "+
-    "the middle is taken rather than the average, because an agent run is mostly tool traffic "+
-    "and a mean just counts how many tools ran.\n"+
-    "  How much longer the answers got as the conversation ran on. Above about 1.5 means the "+
-    "replies are growing without the questions getting harder, which is the most replicated "+
-    "published signal that a conversation has gone off the rails. Laban et al. (ICLR 2026) "+
-    "measured derailed answers running 20 to 300% longer than the same task asked in one turn, "+
-    "and found more verbose runs scored worse on five of six tasks. Reproduced in ASE 2026, "+
-    "where solutions grew from 9 to 79 lines over eight turns while pass rates fell.\n\n"+
-    "RE-SENT is cache reads: the conversation so far, sent again on every turn. It grows with "+
-    "roughly the square of a chat's length until compaction caps it, which is why raw size is a "+
-    "poor guide to waste on its own.\n\n"+
-    "What was removed: a multiple against the median chat. It ranked by length rather than "+
-    "waste, and it changed value depending on which window had loaded.";
-  return `<button type="button" class="btn-why" tabindex="0" aria-label="What each column means" title="${attr(body)}">?</button>`;
+/* An always-visible legend beats a hover tooltip. Native title tooltips are slow, invisible on
+   touch, and were reported as simply not working. Plain sentences under the table instead. */
+function columnLegend(){
+  const N=[
+   ["1","Re-sent",
+    "&sum; cache_read_input_tokens over every assistant turn in the chat",
+    "Every reply your tool logs records how many tokens it read back out of cache. That is the conversation so far, sent to the model again. Adding it up across the chat is this number. It is read from the log, not estimated, and it counts nothing you cannot verify: turns whose logs report no split are excluded and reported separately as unmeasured.",
+    "A big number is not a problem by itself. Re-sent text grows with roughly the square of a chat&#39;s length, so a long chat is supposed to be large here. It is the raw size the other three columns judge."],
+   ["2","Share",
+    "this chat&#39;s re-sent &divide; all re-sent in this window",
+    "How much of the window&#39;s re-sent text belongs to this one chat. Every chat in the window adds up to 100%.",
+    "Work top down. A chat at 47% is where your money is; one at 0.2% is not worth opening."],
+   ["3","Cached",
+    "cache read &divide; (cache read + cache write + fresh input)",
+    "How much of what went in came from cache instead of being charged at full price. Providers bill a cache read at roughly a tenth of fresh text.",
+    "High is good here, unlike everything else on this page. A huge chat at 95% is cheap. A small chat at 40% is quietly expensive, because it keeps missing the cache and paying full rate."],
+   ["4","Pushback",
+    "count of your messages that open by correcting it",
+    "The times you said no, that is wrong, or I already told you. Slash commands and tool output are not counted, and it only reads the start of a message, so it misses polite corrections.",
+    "Three or more and the chat is going in circles: it guessed wrong early and everything since has been you arguing with that guess. Anthropic&#39;s own guidance is to start a fresh chat past two corrections rather than keep correcting. Zero does not mean the chat went well, only that nothing obvious was flagged."]
+  ];
+  return N.map(([n,name,formula,what,read])=>`<div class="fnote">
+    <span class="n">${n}</span>
+    <span><b>${name}</b> &nbsp;<span class="f">${formula}</span><br>${what} <i>${read}</i></span>
+  </div>`).join("");
 }
 
 /* Cache hit ratio: the honest counterpart to raw size. Size says how BIG a chat is, which is
@@ -1321,19 +1343,84 @@ function whyColumns(lk){
 function cacheHitLine(lk){
   if(lk==null || lk.cacheHit==null) return "";
   const v=+lk.cacheHit;
-  return `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">Across this window, <b>${esc(v)}%</b> of everything sent in came from cache rather than being paid for at the full input rate${(+lk.freshInput>0)?`, against ${esc(fmt(lk.freshInput))} of fresh input`:""}. Higher is better here, unlike everything else on this page. ${whyColumns(lk)}</p>`;
+  return `<p style="max-width:78ch;margin:var(--s4) 0 0;font-size:14px">Across this window, <b>${esc(v)}%</b> of everything sent in came from cache rather than being paid for at the full input rate${(+lk.freshInput>0)?`, against ${esc(fmt(lk.freshInput))} of fresh input`:""}. Higher is better here, unlike everything else on this page.</p>`;
 }
 
-/* Reply bloat badge. Below 6 turns the server sends null, because thirds of a five-turn chat
-   are not a measurement. */
-function bloatBadge(v){
-  if(v==null) return `<span class="muted" title="Not enough substantive replies in this chat to compare. Turns under 40 output tokens are tool calls, not answers, and are left out.">&ndash;</span>`;
-  const n=+v;
-  const cls = n>=1.5 ? "tag-accent" : "tag-quiet";
-  const tip = n>=1.5
-    ? `Replies in the last third of this chat are ${n.toFixed(2)}x as long as in the first third. Growing answers without harder questions is the strongest published sign a conversation has drifted.`
-    : `Reply length is steady across this chat (${n.toFixed(2)}x). No drift signal.`;
-  return `<span class="tag ${cls} num" title="${attr(tip)}">${esc(n.toFixed(2))}x</span>`;
+/* Pushback count. Anthropic's own Claude Code guidance is the only vendor-published threshold
+   in this area: correct it more than twice on the same issue and start fresh. So three is where
+   the badge turns. Undercounts on purpose, see is_correction() in tracker.py. */
+/* What each tool actually does, in one line, for the hover. Names come from the logs; anything
+   unknown falls through to a generic line rather than an empty tooltip. */
+const TOOL_DOC={
+  Read:"Opens a file and reads it into the conversation. Cheap per call, but a big file becomes history that is re-sent on every later turn.",
+  Write:"Creates or overwrites a whole file.",
+  Edit:"Changes part of a file in place. Cheaper than rewriting the whole thing.",
+  MultiEdit:"Several edits to one file in a single call.",
+  NotebookEdit:"Edits a cell in a Jupyter notebook.",
+  Bash:"Runs a shell command. Long output is the usual reason a chat suddenly gets expensive.",
+  shell:"Runs a shell command. Long output is the usual reason a chat suddenly gets expensive.",
+  Glob:"Finds files by name pattern. Very cheap.",
+  Grep:"Searches inside files for text. Much cheaper than reading the files.",
+  WebFetch:"Fetches one page and reads it. Whole pages land in the conversation and stay there.",
+  WebSearch:"Searches the web and pulls back results.",
+  Task:"Starts a sub-agent with its own context. Only its answer comes back, so it keeps big work out of this chat.",
+  Agent:"Starts a sub-agent with its own context. Only its answer comes back, so it keeps big work out of this chat.",
+  TodoWrite:"Updates the task list shown while it works.",
+  TaskCreate:"Adds an item to the task list.",
+  TaskUpdate:"Marks a task done or changes it.",
+  Skill:"Loads a saved set of instructions for a particular kind of job.",
+  SendUserFile:"Sends you a finished file.",
+  Artifact:"Publishes a page you can open and share.",
+  ExitPlanMode:"Finishes planning and asks you to approve before acting."
+};
+function toolDoc(name){
+  if(TOOL_DOC[name]) return TOOL_DOC[name];
+  if(String(name).indexOf("MCP")===0) return "A connected outside service. What it costs depends on how much it sends back.";
+  return "A tool this chat called.";
+}
+function toolStrip(list){
+  const t=(list||[]);
+  if(!t.length) return "";
+  const total=t.reduce((a,x)=>a+(+x[1]||0),0);
+  return `<div class="tools" role="list" aria-label="Tools this chat called">`+
+    t.map(([nm,n])=>`<span class="tl" role="listitem" data-tip="${attr(nm+" — called "+nfmt(n)+" time"+(n===1?"":"s")+" in this chat.\n\n"+toolDoc(nm))}">${esc(nm)} <b>${esc(nfmt(n))}</b></span>`).join("")+
+    `</div><div class="muted" style="font-size:11px;margin-top:2px">${esc(nfmt(total))} tool call${total===1?"":"s"}${t.length>=6?" · scroll sideways for the rest":""}</div>`;
+}
+
+/* One tooltip element, delegated hover, positioned in viewport coordinates and clamped to the
+   edges. Serves the tool chips, the stat labels and the footnote markers alike. */
+(function(){
+  let el=null;
+  function box(){ if(!el){ el=document.createElement("div"); el.id="tt"; document.body.appendChild(el); } return el; }
+  function show(t,x,y){
+    const b=box(); b.textContent=t; b.classList.add("on");
+    const r=b.getBoundingClientRect();
+    let L=x+14, T=y+16;
+    if(L+r.width>innerWidth-8) L=Math.max(8,x-r.width-14);
+    if(T+r.height>innerHeight-8) T=Math.max(8,y-r.height-14);
+    b.style.left=L+"px"; b.style.top=T+"px";
+  }
+  function hide(){ if(el) el.classList.remove("on"); }
+  document.addEventListener("mouseover",function(e){
+    const t=e.target&&e.target.closest?e.target.closest("[data-tip]"):null;
+    if(t) show(t.getAttribute("data-tip"), e.clientX, e.clientY); else hide();
+  });
+  document.addEventListener("mousemove",function(e){
+    const t=e.target&&e.target.closest?e.target.closest("[data-tip]"):null;
+    if(t&&el&&el.classList.contains("on")) show(t.getAttribute("data-tip"), e.clientX, e.clientY);
+  });
+  document.addEventListener("scroll",hide,true);
+  window.addEventListener("blur",hide);
+})();
+
+function corrBadge(n){
+  const v=+n||0;
+  if(v===0) return `<span class="muted" title="No obvious pushback in this chat.">0</span>`;
+  const cls = v>=3 ? "tag-accent" : "tag-quiet";
+  const tip = v>=3
+    ? `You pushed back ${v} times in this chat. Anthropic's own guidance is that past two corrections on the same issue the context is cluttered with failed approaches, and a fresh chat beats continuing.`
+    : `You pushed back ${v} time${v===1?"":"s"} in this chat. Under three, so nothing to act on.`;
+  return `<span class="tag ${cls} num" title="${attr(tip)}">${esc(v)}</span>`;
 }
 
 function cutChatsHTML(){
@@ -1368,45 +1455,44 @@ function cutChatsHTML(){
   const rows=lk.chats.map((c,i)=>{
     const id="leak-"+i;
     const label=chatLabel(c), sub=chatSub(c);
-    const short=clip(label,110);
     const link=c.file
-      ? `<a class="linky" href="/transcript?file=${encodeURIComponent(c.file)}" target="_blank" rel="noopener" title="${attr(label)} — open this chat's transcript">${esc(short)} &#8599;</a>`
-      : `<span title="${attr(label)}">${esc(short)}</span>`;
+      ? `<a class="linky" href="/transcript?file=${encodeURIComponent(c.file)}" target="_blank" rel="noopener" title="${attr(label)} — open this chat's transcript">${esc(clip(label,150))} &#8599;</a>`
+      : `<span title="${attr(label)}">${esc(clip(label,150))}</span>`;
     const asking=S.asking[id], ran=S.ran[id];
     let action;
     if(ran) action=ran.ok?`<span class="tag tag-accent">Copied</span>`:`<span class="tag tag-quiet">Not copied</span>`;
-    else if(asking) action="";      // the buttons render in the wide cell below, where they fit
+    else if(asking) action="";
     else action=`<button class="btn btn-secondary btn-sm" data-act="fixask" data-id="${attr(id)}">Compact</button>`;
-    return `<tr>
-      <td>
-        <span class="ell" style="display:block">${link}</span>
-        ${sub?`<span class="ell muted" style="display:block;font-size:12px">${esc(sub)}</span>`:""}
-        ${asking?`<span style="display:block;font-size:12.5px;margin-top:6px"><span class="muted">Compacting swaps that chat's history for a summary. <b>What stops:</b> the re-reading. <b>What survives:</b> the full transcript on disk. We cannot do it inside another app, so this copies a prompt for you to paste into that chat.</span>
-          <span style="display:flex;gap:var(--s2);margin-top:var(--s2)"><button class="btn btn-primary btn-sm" data-act="fixgo" data-id="${attr(id)}">Copy the prompt</button>
-          <button class="btn btn-ghost btn-sm" data-act="fixcancel" data-id="${attr(id)}">Cancel</button></span></span>`:""}
-        ${(ran&&ran.ok)?`<span class="muted" style="display:block;font-size:12.5px;margin-top:6px">Copied. Paste it into that chat, then open a new one with the note it hands back.${(+c.saves>0)?" That should stop about "+esc(fmt(c.saves))+" of re-sending.":""}</span>`:""}
-        ${(ran&&!ran.ok)?`<span class="muted" style="display:block;font-size:12.5px;margin-top:6px">${esc(ran.next||"")}</span>`:""}
-      </td>
-      <td class="num" style="text-align:right;white-space:nowrap">${esc(nfmt(c.turns||0))}</td>
-      <td class="num" style="text-align:right;white-space:nowrap">${esc(fmt(c.resent||0))}</td>
-      <td class="num" style="text-align:right;white-space:nowrap">${c.share==null?`<span class="muted">&ndash;</span>`:`<span class="tag tag-accent num" title="${attr(c.share+"% of all re-sent tokens in this window. "+fmt(c.perTurn)+" per turn.")}">${esc(c.share)}%</span>`}</td>
-      <td class="num" style="text-align:right;white-space:nowrap">${c.cacheHit==null?`<span class="muted">&ndash;</span>`:`<span class="tag ${c.cacheHit>=90?"tag-quiet":"tag-accent"} num" title="${attr(c.cacheHit+"% of what this chat sent in came from cache rather than being paid for at the full input rate. Higher is cheaper. Cache reads bill at about a tenth of fresh input.")}">${esc(c.cacheHit)}%</span>`}</td>
-      <td class="num" style="text-align:right;white-space:nowrap">${bloatBadge(c.bloat)}</td>
-      <td style="text-align:right;white-space:nowrap">${action}</td>
-    </tr>`;
+    const stat=(k,n,v,t)=>`<span class="stat"${t?` data-tip="${attr(t)}"`:""}><span class="k">${k}<sup class="fn">${n}</sup></span><span class="v">${v}</span></span>`;
+    return `<div class="lrow">
+      <div class="lmain">
+        <div style="font-size:15px;line-height:1.35">${link}</div>
+        ${sub?`<div class="ell muted" style="font-size:12px;margin-top:1px">${esc(sub)}</div>`:""}
+        ${toolStrip(c.tools)}
+        ${asking?`<div style="font-size:12.5px;margin-top:var(--s3)"><span class="muted">Compacting swaps that chat's history for a summary. Nothing is deleted.</span>
+          <span style="display:flex;gap:var(--s2);margin-top:var(--s2)"><button class="btn btn-primary btn-sm" data-act="fixgo" data-id="${attr(id)}">Copy the compact request</button>
+          <button class="btn btn-ghost btn-sm" data-act="fixcancel" data-id="${attr(id)}">Cancel</button></span></div>`:""}
+        ${(ran&&ran.ok)?`<div class="muted" style="font-size:12.5px;margin-top:var(--s2)">Copied. Paste it into that chat, then open a new one.</div>`:""}
+        ${(ran&&!ran.ok)?`<div class="muted" style="font-size:12.5px;margin-top:var(--s2)">${esc(ran.next||"")}</div>`:""}
+      </div>
+      <div class="lnums">
+        <div>
+          <div class="big" data-tip="${attr(nfmt(c.resent||0)+" tokens of history re-sent across "+nfmt(c.turns||0)+" messages. This is the sum of cache_read_input_tokens over every assistant turn in the chat, read from the log rather than estimated.")}">${esc(nfmt(c.resent||0))}</div>
+          <div class="bigsub muted">re-sent<sup class="fn">1</sup> &middot; ${esc(nfmt(c.turns||0))} messages</div>
+        </div>
+        ${stat("Share",2, c.share==null?"&ndash;":esc(c.share)+"%", c.share==null?"":c.share+"% of everything re-sent in this window")}
+        ${stat("Cached",3, c.cacheHit==null?"&ndash;":esc(c.cacheHit)+"%", c.cacheHit==null?"":c.cacheHit+"% came from cache instead of full price. Higher is cheaper.")}
+        ${stat("Pushback",4, corrBadge(c.corrections), "")}
+        <div style="flex:0 0 auto;min-width:88px;text-align:right">${action}</div>
+      </div>
+    </div>`;
   }).join("");
 
   return `${segs}
     ${keyLine}
-    <div class="tablewrap" style="margin-top:var(--s4)">
-      <table class="table fixed">
-        <colgroup><col><col style="width:92px"><col style="width:92px"><col style="width:76px"><col style="width:78px"><col style="width:78px"><col style="width:116px"></colgroup>
-        <thead><tr><th>Chat</th><th style="text-align:right">Messages</th><th style="text-align:right">Re-sent</th>
-          <th style="text-align:right">Share</th><th style="text-align:right">Cached</th><th style="text-align:right">Bloat</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    <p class="muted" style="margin:var(--s3) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript. Each window lists the ${esc(nfmt((lk.chats||[]).length))} heaviest chats that were last <i>active</i> in it, so a chat can make the cut in a short window and miss it in a longer one where bigger chats crowd it out.</p>
+    <div class="lboard">${rows}</div>
+    <div class="muted" style="margin:var(--s4) 0 0;font-size:12.5px;max-width:88ch">${columnLegend()}</div>
+    <p class="muted" style="margin:var(--s4) 0 0;font-size:12.5px;max-width:84ch">Re-sent text is the history a chat sends again on every turn. It grows with the square of the chat's length, so the fix is to start again from a summary rather than to type less. Cowork titles are the app&#39;s own sidebar names and follow renames on their own. Claude Code and Codex chats have no user-set name, so their heading is the chat&#39;s summary or opening request. Every title links to the real transcript. Each window lists the ${esc(nfmt((lk.chats||[]).length))} heaviest chats that were last <i>active</i> in it, so a chat can make the cut in a short window and miss it in a longer one where bigger chats crowd it out.</p>
     ${codexNote}`;
 }
 

@@ -248,7 +248,7 @@ def analytics_error(where, err):
         pass
 
 CACHE_FILE = os.path.join(DATA_DIR, ".cache.json")
-CACHE_VERSION = 12   # bumped: Codex entries are now per-turn with a real split from its cumulative counters
+CACHE_VERSION = 14   # bumped: per-file cache entries now carry {corr, tools} per session
 PORT = int(os.environ.get("TRACKER_PORT", "8799"))
 # Secret embedded in the served page; required on POST /api/fix|kill so only the page
 # we served (same origin) can trigger an action. Persisted so an already-open tab keeps
@@ -278,6 +278,36 @@ def _cached(key, ttl, fn):
     if c and now - c[0] < ttl:
         return c[1]
     v = fn(); _LIVE_CACHE[key] = (now, v); return v
+
+# A correction is a message that pushes back on what just came out. Anthropic publishes the only
+# vendor-backed threshold in this area, in the Claude Code best practices: "If you've corrected
+# Claude more than twice on the same issue in one session, the context is cluttered with failed
+# approaches. Run /clear and start fresh." Three is therefore the line the board draws.
+#
+# This is deliberately a keyword matcher over the OPENING of a user message, not a classifier.
+# Published work on detecting frustration in deployed assistants (COLING 2025 Industry Track,
+# arXiv:2411.17437) found keyword matching scores near-perfect precision and about 1% recall,
+# because "poor conversation handling does not always manifest as overtly negative language".
+# So this undercounts by design. A chat it flags is almost certainly in trouble; a chat it does
+# not flag is not therefore fine. The Cached and Share columns say what a chat costs; this one
+# only ever says "this one went round in circles", and only when it is obvious.
+_CORRECTION_PAT = re.compile(
+    r"^\s*(?:no+[,.!\s]|nope\b|wrong\b|that'?s (?:not|wrong|incorrect)|not what i|"
+    r"i (?:said|asked|told you|already said|meant)|you (?:didn'?t|did not|still|keep|forgot|missed|ignored)|"
+    r"still (?:not|doesn'?t|isn'?t|broken|failing|wrong)|again[,.!\s]|"
+    r"that (?:didn'?t|does not|doesn'?t) work|it'?s still|undo\b|revert\b|go back\b|"
+    r"stop\b|why did you|read (?:the|what i))", re.I)
+
+def is_correction(text):
+    """True when a user message opens by pushing back. Checks the opening only: a correction
+    leads with the objection, while a long message that happens to contain the word "no" is
+    usually a fresh instruction."""
+    if not text:
+        return False
+    t = " ".join(str(text).split())
+    if not t or t.startswith("<") or t.startswith("/"):   # tool tags and slash commands are not corrections
+        return False
+    return bool(_CORRECTION_PAT.search(t[:120]))
 
 def user_text(msg):
     c = msg.get("content")
@@ -313,7 +343,8 @@ def _empty_breakdown():
     return {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
 
 def claude_entries(path, tool, file_date):
-    entries, titles = [], {}
+    entries, titles, corr = [], {}, defaultdict(int)
+    tools = defaultdict(lambda: defaultdict(int))   # session -> pretty tool name -> calls
     tb = _empty_breakdown()   # input/cache/output split, summed across every usage record in this file
     last_ts = None
     file_sid = None
@@ -348,7 +379,16 @@ def claude_entries(path, tool, file_date):
                         ct = _clean_title(t)
                         if ct:   # don't let a tag-only message (e.g. a scheduled run) claim the title slot
                             titles.setdefault(sk, ct)
+                        if is_correction(t):
+                            corr[sk] += 1
                     continue
+                # Tool calls ride along on assistant messages, which already carry usage, so
+                # counting them here costs one pass over content that is in hand and no extra
+                # file reads. This is what fills the tool strip on the leak board.
+                if isinstance(msg.get("content"), list):
+                    for _it in msg["content"]:
+                        if isinstance(_it, dict) and _it.get("type") == "tool_use":
+                            tools[sk][_pretty_tool(_it.get("name"))] += 1
                 u = msg.get("usage")
                 if not isinstance(u, dict):
                     continue
@@ -374,7 +414,8 @@ def claude_entries(path, tool, file_date):
                                  u.get("cache_read_input_tokens") or 0, u.get("output_tokens") or 0]])
     except Exception:
         pass
-    return entries, titles, tb
+    return entries, titles, tb, {"corr": dict(corr),
+                                "tools": {k: dict(v) for k, v in tools.items()}}
 
 def codex_entries(path, file_date, index_map):
     """Codex rollout logs carry CUMULATIVE counters per token_count event:
@@ -457,8 +498,8 @@ def codex_entries(path, file_date, index_map):
         for _dt, _tok, sp in turns:  # Today's cache-read figure agrees with the Models cut
             tb["input"] += sp[0]; tb["cache_write"] += sp[1]
             tb["cache_read"] += sp[2]; tb["output"] += sp[3]
-        return ents, {sk: index_map.get(sid or "", "Codex session")}, tb
-    return [], {}, _empty_breakdown()
+        return ents, {sk: index_map.get(sid or "", "Codex session")}, tb, {"corr": {}, "tools": {}}
+    return [], {}, _empty_breakdown(), {"corr": {}, "tools": {}}
 
 def _sqlite_title_map(db):
     """Best-effort id -> chat title from an unknown SQLite schema (newer Codex keeps titles in logs_*.sqlite)."""
@@ -588,7 +629,7 @@ def custom_entries(path, src, file_date):
     tkeys = set(src.get("tokenKeys") or [])
     tskeys = src.get("tsKeys") or ["timestamp", "_audit_timestamp", "created_at", "time", "ts"]
     if not tkeys:
-        return [], {}, _empty_breakdown()
+        return [], {}, _empty_breakdown(), {"corr": {}, "tools": {}}
     sk = name + ":" + os.path.basename(path)
     proj = shorten(os.path.dirname(path)) if "/" in path else name
     ttlkeys = set(src.get("titleKeys") or ["title", "name", "thread_name", "summary", "subject"])
@@ -623,7 +664,7 @@ def custom_entries(path, src, file_date):
     ents = [[dt, name, src.get("model") or "?", proj, int(tok), sk, path] for dt, tok in by_date.items() if tok > 0]
     # Custom sources only declare which field(s) hold a token count, not which kind
     # (input/cache/output), so they don't contribute to the token breakdown split.
-    return ents, ({sk: (ctitle or os.path.basename(path))} if ents else {}), _empty_breakdown()
+    return ents, ({sk: (ctitle or os.path.basename(path))} if ents else {}), _empty_breakdown(), {"corr": {}, "tools": {}}
 
 # ---------- build ----------
 def _gather_files_uncached():
@@ -655,6 +696,8 @@ def build():
         STATE["parsed"] = 0
         newcache = {"_v": CACHE_VERSION}
         entries, titles, parsed = [], {}, 0
+        corrections = defaultdict(int)   # session key -> times the user pushed back
+        sess_tools = defaultdict(lambda: defaultdict(int))   # session key -> tool -> calls
         tokenBreakdown = _empty_breakdown()   # input/cache/output totals across every parsed record
         kind_files = defaultdict(int); kind_tokens = defaultdict(int)
         for kind, path in files:
@@ -666,17 +709,31 @@ def build():
             c = cache.get(path)
             if c and c.get("mtime") == mt and "tb" in c:
                 ents, tts, tb = c["entries"], c.get("titles", {}), c.get("tb", _empty_breakdown())
+                cr = c.get("corr", {})
             else:
                 fdate = datetime.date.fromtimestamp(mt).isoformat()
-                if kind == "claude":
-                    ents, tts, tb = claude_entries(path, "Claude Code", fdate)
-                elif kind == "cowork":
-                    ents, tts, tb = claude_entries(path, "Cowork", fdate)
-                else:
-                    ents, tts, tb = codex_entries(path, fdate, index_map)
+                # One unreadable or unexpected file must never empty the whole dashboard. A
+                # three-value return slipped through here once and the scan finished reporting
+                # zero tokens, which looks exactly like "you have never used any of these tools".
+                # Skipping the file and carrying on is always the better failure.
+                try:
+                    if kind == "claude":
+                        ents, tts, tb, cr = claude_entries(path, "Claude Code", fdate)
+                    elif kind == "cowork":
+                        ents, tts, tb, cr = claude_entries(path, "Cowork", fdate)
+                    else:
+                        ents, tts, tb, cr = codex_entries(path, fdate, index_map)
+                except Exception:
+                    ents, tts, tb, cr = [], {}, _empty_breakdown(), {"corr": {}, "tools": {}}
+                    STATE["skippedFiles"] = STATE.get("skippedFiles", 0) + 1
                 parsed += 1
                 STATE["parsed"] = parsed
-            newcache[path] = {"mtime": mt, "entries": ents, "titles": tts, "tb": tb}
+            newcache[path] = {"mtime": mt, "entries": ents, "titles": tts, "tb": tb, "corr": cr}
+            for _sk, _n in ((cr or {}).get("corr") or {}).items():
+                corrections[_sk] += _n
+            for _sk, _tm in ((cr or {}).get("tools") or {}).items():
+                for _tn, _tc in _tm.items():
+                    sess_tools[_sk][_tn] += _tc
             entries.extend(ents)
             kind_tokens[kind] += sum(e[4] for e in ents)
             for k, v in tts.items():
@@ -703,7 +760,11 @@ def build():
                     ents, tts, tb = c["entries"], c.get("titles", {}), c.get("tb", _empty_breakdown())
                 else:
                     fdate = datetime.date.fromtimestamp(mt).isoformat()
-                    ents, tts, tb = custom_entries(path, src, fdate)
+                    try:
+                        ents, tts, tb, _cr = custom_entries(path, src, fdate)
+                    except Exception:
+                        ents, tts, tb = [], {}, _empty_breakdown()
+                        STATE["skippedFiles"] = STATE.get("skippedFiles", 0) + 1
                     parsed += 1; STATE["parsed"] = parsed
                 newcache[ck] = {"mtime": mt, "entries": ents, "titles": tts, "tb": tb}
                 entries.extend(ents); ntok += sum(e[4] for e in ents)
@@ -716,7 +777,8 @@ def build():
             json.dump(newcache, open(CACHE_FILE, "w"))
         except Exception:
             pass
-        d = aggregate(entries, titles)
+        d = aggregate(entries, titles, dict(corrections),
+                      {k: dict(v) for k, v in sess_tools.items()})
         d["tokenBreakdown"] = tokenBreakdown
         # self-check: a source with log files but zero parsed tokens likely means its format changed
         warn = []
@@ -871,60 +933,17 @@ def _split_savings(resent, turns, target_turns=SPLIT_TARGET_TURNS):
         return 0
     return int(min(resent * 0.90, resent - (resent / k)))
 
-REPLY_FLOOR_TOKENS = 40   # below this a turn is a tool acknowledgement, not an answer
-
-def _reply_bloat(out_seq):
-    """Reply bloat: how much longer the assistant's answers got as the conversation ran on.
-
-        bloat = mean(output tokens, last third of turns) / mean(output tokens, first third)
-
-    This is the most replicated observable signal that a conversation has gone wrong. Laban et al.
-    (ICLR 2026 Outstanding Paper, arXiv:2505.06120) found answers in derailed multi-turn
-    conversations run 20-300% longer than the same task answered in one turn, and that even the
-    ones that eventually get there are 27% longer. They also found that across five of six tasks
-    the more verbose runs scored worse. Independently reproduced by Regression Accumulation in
-    Multi-Turn LLM Programming Conversations (ASE 2026, arXiv:2607.01855), where reference
-    solutions grew from 9 to 79 lines across eight turns while pass rates fell.
-
-    Output tokens per turn are already in the logs, so this costs nothing to compute and needs no
-    transcript text. It is a RATIO OF MEANS rather than a running total on purpose: The
-    Autocorrelation Blind Spot (arXiv:2604.14414) showed 42% of turn-level findings built on
-    cumulative metrics fail cluster-robust correction, while differential ones survive.
-
-    Two things this has to survive that a chat benchmark never sees. Agent harnesses spend most
-    of their turns on tool calls whose output is a few tokens, so a mean is dominated by how many
-    tools ran rather than by how long the answers got: on this machine one 2,319-turn chat scored
-    0.07, a fourteen-fold "shrink" that was really just a tail of tool acknowledgements. So the
-    tiny turns are filtered out and the middle of what remains is taken with a median, not a mean.
-
-    Returns None below 6 substantive replies, where thirds are too small to mean anything."""
-    seq = [o for o in (out_seq or []) if o is not None and o >= REPLY_FLOOR_TOKENS]
-    n = len(seq)
-    if n < 6:
-        return None
-    k = n // 3
-    def med(v):
-        v = sorted(v)
-        m = len(v) // 2
-        return float(v[m]) if len(v) % 2 else (v[m - 1] + v[m]) / 2.0
-    first, last = med(seq[:k]), med(seq[-k:])
-    if first <= 0:
-        return None
-    return round(last / first, 2)
-
 def _cache_hit(read, write, fresh):
     """Cache hit ratio: of everything the model had to read on the way in, what share came from
     cache rather than being paid for at the full input rate.
 
         hit = cache_read / (cache_read + cache_write + fresh_input)
 
-    This is the metric Anthropic, OpenAI, Langfuse, Braintrust and Arize all expose, and it is
-    the honest counterpart to the x badge. The badge answers "is this chat big", which is mostly
-    a question about length. This answers "is this chat WASTEFUL", which is what a bill responds
-    to. Cache reads bill at roughly a tenth of fresh input, so a chat re-sending an enormous but
-    well-cached history is cheap, while a short chat that keeps missing cache is expensive. High
-    is good here, unlike every other number on this page. Returns None when there is nothing to
-    divide, so the UI can say "not measured" instead of printing a confident 0%."""
+    This is the metric Anthropic, OpenAI, Langfuse, Braintrust and Arize all expose. Cache reads
+    bill at roughly a tenth of fresh input, so a chat re-sending an enormous but well-cached
+    history is cheap, while a short chat that keeps missing cache is expensive. High is good here,
+    unlike every other number on the page. Returns None when there is nothing to divide, so the UI
+    can say "not measured" rather than print a confident 0%."""
     denom = (read or 0) + (write or 0) + (fresh or 0)
     if denom <= 0:
         return None
@@ -932,7 +951,8 @@ def _cache_hit(read, write, fresh):
 
 def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, resolve,
                 unmeasured=0, top=8, since=None, window="all",
-                top_share_n=5, sess_fresh=None, sess_cachew=None, sess_out_seq=None):
+                top_share_n=5, sess_fresh=None, sess_cachew=None, corrections=None,
+                sess_tools=None):
     """One window of the leak board. `since` is an ISO date; a chat belongs to the window if it was
     last ACTIVE in it. Windowing by activity (not by slicing turns) is what lets the board show
     improvement: split a monster chat today and it ages out of the 7- and 30-day views, while the
@@ -972,7 +992,9 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
                       "perTurn": int(r / max(1, n - 1)),
                       "cacheHit": _cache_hit(r, (sess_cachew or {}).get(sk, 0),
                                              (sess_fresh or {}).get(sk, 0)),
-                      "bloat": _reply_bloat((sess_out_seq or {}).get(sk)),
+                      "corrections": int((corrections or {}).get(sk, 0)),
+                      "tools": sorted(((sess_tools or {}).get(sk) or {}).items(),
+                                      key=lambda kv: -kv[1])[:14],
                       "saves": _split_savings(r, n)})
     # Entry fee: what a chat costs before the first word — the tool's own instructions, CLAUDE.md,
     # and one description per connected tool. Median (not mean) so a single big opening read can't
@@ -1017,7 +1039,7 @@ def build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date, res
             "gauge": {"p75": _pctile(resents, 0.75), "p90": _pctile(resents, 0.90)},
             "unmeasuredTokens": unmeasured}
 
-def aggregate(entries, titles):
+def aggregate(entries, titles, corrections=None, sess_tools=None):
     day = defaultdict(lambda: defaultdict(int))
     day_total = defaultdict(int)
     day_proj = defaultdict(lambda: defaultdict(int))
@@ -1032,7 +1054,6 @@ def aggregate(entries, titles):
     sess_resent = defaultdict(int)   # cache_read per session = the conversation re-sent
     sess_fresh  = defaultdict(int)   # fresh input tokens: text the cache did NOT cover
     sess_cachew = defaultdict(int)   # cache writes: paying to put something INTO the cache
-    sess_out_seq = defaultdict(list) # output tokens per turn, IN ORDER: the reply-bloat signal
     sess_startup = {}                # that session's FIRST turn: the entry fee before you type
     sess_proj = {}
     unmeasured = 0                   # tokens from sources with no split (Codex / custom)
@@ -1074,7 +1095,6 @@ def aggregate(entries, titles):
             sess_resent[sk] += split[2]
             sess_fresh[sk]  += split[0]
             sess_cachew[sk] += split[1]
-            sess_out_seq[sk].append(split[3])
             if sk not in sess_startup:          # entries arrive in file order, so this is turn 1
                 sess_startup[sk] = split[1] or split[0]
             sess_proj.setdefault(sk, sp)
@@ -1135,7 +1155,7 @@ def aggregate(entries, titles):
             leaks[_w] = build_leaks(sess_resent, sess_turns, sess_startup, sess_proj, sess_date,
                                     _resolve, unmeasured, since=_since, window=_w,
                                     sess_fresh=sess_fresh, sess_cachew=sess_cachew,
-                                    sess_out_seq=sess_out_seq)
+                                    corrections=corrections, sess_tools=sess_tools)
     except Exception:
         leaks = None   # a leaks failure must never take the dashboard down
     return {"generatedAt": datetime.datetime.now().isoformat(timespec="seconds"),
@@ -2959,7 +2979,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._local_host():   # block DNS-rebinding / non-local Host headers
             self._send(403, json.dumps({"error": "non-local request refused"})); return
-        if self.path in ("/", "/index.html"):
+        # The page is one file, so the root route has to tolerate a query string. Without this,
+        # any cache-busting reload (/?v=123) or a link carrying tracking params 404s.
+        if self.path.split("?", 1)[0] in ("/", "/index.html"):
             try:
                 html = open(os.path.join(HERE, os.environ.get("TOKENBURN_HTML", "tracker.html")), "r", encoding="utf-8").read()
                 _t = load_theme()
