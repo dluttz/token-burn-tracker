@@ -86,6 +86,11 @@ a{color:var(--accent);text-underline-offset:3px}
 .nav .navright{margin-left:auto;display:flex;align-items:center;gap:var(--s3);flex:none;flex-wrap:wrap;row-gap:var(--s1)}
 .burnread{display:flex;align-items:center;gap:var(--s2);font-size:13px;white-space:nowrap}
 .burnread .pulse{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:tbbreath 3.4s ease-in-out infinite;flex:none}
+/* [hidden] is only a UA-stylesheet rule, so ANY author "display" declaration silently beats it.
+   .rescanchip set display:inline-flex, which meant the chip rendered permanently no matter what
+   el.hidden was set to: the JS said hidden, the screen said "Rescanning" forever. One global
+   rule so this cannot happen to any other element on the page either. */
+[hidden]{display:none !important}
 .rescanchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
 .rescanchip .sp{width:11px;height:11px;border:1.5px solid var(--rule);border-top-color:var(--accent);border-radius:50%;animation:tbspin .8s linear infinite;flex:none}
 .demopill{font-size:11.5px;padding:3px 10px;border-radius:var(--r-md);border:1px solid var(--accent);color:var(--accent);white-space:nowrap}
@@ -1180,7 +1185,19 @@ function figsHTML(){
      in a cloud Cowork session or on claude.ai never touches those files, so it cannot appear
      here. Someone who spent all day in a cloud session and opens this to a zero should be told
      why, not left to conclude the tracker is broken. */
-  const coverage = `<p class="subtle" style="margin:var(--s2) 0 0">Reads the logs Claude Code, Cowork and Codex write on this Mac. Work done in a cloud Cowork session or on claude.ai leaves no file here, so it is not counted.</p>`;
+  /* Naming the newest file each tool wrote turns "is this thing even working?" into something
+     the person can check for themselves: a recent stamp with a small number means their usage
+     really was small, a stale stamp means the files are not being found, and those are very
+     different problems. */
+  const nl=(d.newestLog)||{};
+  const stamps=Object.keys(nl).sort().map(k=>{
+    const t=String(nl[k]).replace("T"," ");
+    const day=String(nl[k]).slice(0,10);
+    const g=(typeof daysSince==="function")?daysSince(day):null;
+    const when = g===0?"today":(g===1?"yesterday":(g!=null?g+" days ago":t));
+    return `${esc(k)} ${esc(when)}`;
+  }).join(" &middot; ");
+  const coverage = `<p class="subtle" style="margin:var(--s2) 0 0">Reads the logs Claude Code, Cowork and Codex write on this Mac. Work done in a cloud Cowork session or on claude.ai leaves no file here, so it is not counted.${stamps?` Newest log seen: ${stamps}.`:""}</p>`;
   return `<div class="figs">${figs.map(f=>`<div class="fig">
     <div class="lab">${esc(f.lab)}</div><div class="val num">${esc(f.val)}</div><div class="sub num">${esc(f.sub)}</div>
   </div>`).join("")}</div>${codexNote}${coverage}`;

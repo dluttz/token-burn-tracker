@@ -700,12 +700,19 @@ def build():
         sess_tools = defaultdict(lambda: defaultdict(int))   # session key -> tool -> calls
         tokenBreakdown = _empty_breakdown()   # input/cache/output totals across every parsed record
         kind_files = defaultdict(int); kind_tokens = defaultdict(int)
+        # Newest log file each tool has written, whether or not it parsed to anything. This is the
+        # answer to "is it even seeing my recent work?" -- a fresh timestamp here with a low token
+        # count means the volume really is that low; a stale one means the files are not being
+        # found, which is a different problem entirely. Without it the user cannot tell which.
+        kind_newest = defaultdict(float)
         for kind, path in files:
             kind_files[kind] += 1
             try:
                 mt = os.path.getmtime(path)
             except OSError:
                 continue
+            if mt > kind_newest[kind]:
+                kind_newest[kind] = mt
             c = cache.get(path)
             if c and c.get("mtime") == mt and "tb" in c:
                 ents, tts, tb = c["entries"], c.get("titles", {}), c.get("tb", _empty_breakdown())
@@ -777,9 +784,13 @@ def build():
             json.dump(newcache, open(CACHE_FILE, "w"))
         except Exception:
             pass
+        _LABEL = {"claude": "Claude Code", "cowork": "Cowork", "codex": "Codex"}
+        newest = {_LABEL.get(k, k): datetime.datetime.fromtimestamp(v).isoformat(timespec="minutes")
+                  for k, v in kind_newest.items() if v > 0}
         d = aggregate(entries, titles, dict(corrections),
                       {k: dict(v) for k, v in sess_tools.items()})
         d["tokenBreakdown"] = tokenBreakdown
+        d["newestLog"] = newest
         # self-check: a source with log files but zero parsed tokens likely means its format changed
         warn = []
         for k, nm in (("claude", "Claude Code"), ("cowork", "Cowork"), ("codex", "Codex")):
