@@ -180,6 +180,8 @@ sup.fn{font-size:9px;font-weight:700;opacity:.55;margin-left:1px;vertical-align:
   white-space:pre-wrap}
 #tt.on{opacity:1}
 [data-tip]{cursor:help}
+.rescanchip.stale{color:var(--accent)}
+.rescanchip.stale .sp{animation:none;opacity:.5}
 .linky{color:inherit;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
 .linky:hover{text-decoration-color:var(--accent);color:var(--accent)}
 
@@ -397,7 +399,7 @@ function nfmt(n){ return (+n||0).toLocaleString("en-US"); }
 /* ---------- in-memory state ---------- */
 const S = {
   view:"today", span:"day", spanAuto:true, cut:"chats", leakWin:"30", ledger:[],
-  data:null, live:null, costs:null, leaks:null, leftovers:null, agents:null,
+  data:null, live:null, costs:null, leaks:null, leftovers:null, agents:null, lastOkAt:null,
   series:{}, widget:null, update:null,
   cap:null,                     // tokens per rolling window, entered by the user
   showUsd:true,
@@ -1174,9 +1176,14 @@ function figsHTML(){
   const codexNote = unmeasured>0
     ? `<p class="subtle" style="margin:var(--s2) 0 0">${esc(fmt(unmeasured))} tokens come from logs that only report totals (older Codex sessions and custom sources), so they sit outside the cache-read figure. They are counted in the totals, just not in the split.</p>`
     : "";
+  /* Coverage, stated plainly. This reads the log files three tools write on THIS Mac. Work done
+     in a cloud Cowork session or on claude.ai never touches those files, so it cannot appear
+     here. Someone who spent all day in a cloud session and opens this to a zero should be told
+     why, not left to conclude the tracker is broken. */
+  const coverage = `<p class="subtle" style="margin:var(--s2) 0 0">Reads the logs Claude Code, Cowork and Codex write on this Mac. Work done in a cloud Cowork session or on claude.ai leaves no file here, so it is not counted.</p>`;
   return `<div class="figs">${figs.map(f=>`<div class="fig">
     <div class="lab">${esc(f.lab)}</div><div class="val num">${esc(f.val)}</div><div class="sub num">${esc(f.sub)}</div>
-  </div>`).join("")}</div>${codexNote}`;
+  </div>`).join("")}</div>${codexNote}${coverage}`;
 }
 
 function reclaimHTML(acts){
@@ -2033,8 +2040,20 @@ function renderChrome(){
   if(b&&bv){ b.hidden=!(S.live&&S.live.burn); bv.textContent=fmt(pm); }
   const rc=$("#rescan-chip"), rt=$("#rescan-text");
   const loading=!!(S.data&&S.data.loading);
-  if(rc){ rc.hidden=!loading;
-    if(loading&&rt) rt.textContent=`Rescanning, ${nfmt((S.data&&S.data.parsed)||0)} of ${nfmt((S.data&&S.data.files)||0)} files`; }
+  /* A spinner with no timeout is a lie waiting to happen. If this tab stops getting answers,
+     whether the server went away or the page itself wedged, the old chip just sat there saying
+     "Rescanning" forever over numbers that were minutes stale. Anything past two minutes without
+     a successful read now says so and tells you what to do about it. */
+  const age=S.lastOkAt ? (Date.now()-S.lastOkAt)/1000 : null;
+  const stale = age!=null && age>120;
+  if(rc){
+    rc.hidden = !(loading||stale);
+    if(rt){
+      if(stale) rt.textContent=`Not updating for ${Math.round(age/60)} min · reload the page`;
+      else if(loading) rt.textContent=`Rescanning, ${nfmt((S.data&&S.data.parsed)||0)} of ${nfmt((S.data&&S.data.files)||0)} files`;
+    }
+    rc.classList.toggle("stale", !!stale);
+  }
 }
 function render(only){
   renderChrome();
@@ -2294,6 +2313,7 @@ async function loadData(){
   try{ d=await apiJSON("/api/data"); }
   catch(e){ return; }
   if(d && (d.days || d.grand!=null || !S.data)) S.data=d;      // keep the last good payload during a rescan
+  S.lastOkAt=Date.now();                                        // proof this tab is still being answered
   if(d && d.update && !S.update) S.update=d.update;
   if(d && d.update && d.update.outdated && !S.updateDismissed && !S.booted) showUpdateModal();
   render();
@@ -2357,6 +2377,9 @@ async function pollAgents(){
   setInterval(()=>{ if(document.hidden) return; pollLive(); pollAgents(); pollLeftovers(); }, 8000);
   setInterval(()=>{ if(document.hidden) return; loadSeries("5d"); loadSeries("1d"); loadCosts(); }, 60000);
   setInterval(()=>{ if(document.hidden) return; loadLeaks(); loadData(); }, 120000);
+  /* renderChrome only, on its own timer: the staleness warning has to appear even when the
+     thing that broke is whatever normally triggers a render. */
+  setInterval(()=>{ try{ renderChrome(); }catch(e){} }, 15000);
   document.addEventListener("visibilitychange", ()=>{
     if(document.hidden) return;
     // sampling paused while hidden, so a long gap would splice hour-old

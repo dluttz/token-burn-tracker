@@ -70,6 +70,12 @@ It reads the local log files your AI tools already write:
 - Cowork — `~/Library/Application Support/Claude/local-agent-mode-sessions`
 - Codex — `~/.codex/sessions` (and its local SQLite for scheduled automations)
 
+**What it cannot see.** These are files on *this* Mac. A Cowork session that runs in the
+cloud, or anything you do on claude.ai in a browser, never writes them, so none of that
+work appears here. If you spent the day in a cloud session and open this to a zero, that
+is why. Reading it would need an account and a network call, which is the one thing this
+tool will not do.
+
 The dashboard can display your **chat titles and full transcripts** so you can see
 where tokens went. **All of this is rendered locally in your browser.**
 
