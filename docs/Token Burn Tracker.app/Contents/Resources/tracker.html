@@ -671,6 +671,32 @@ function breakdown(){
 }
 function hasHistory(){ return !!(S.data && ((S.data.days||[]).length || (+S.data.grand||0)>0)); }
 
+/* --- what to say when nothing is running -------------------------------------------------
+   Most people install a tracker BETWEEN sessions, not during one. The old idle headline read
+   "N tokens of headroom, and nothing burning" over an empty chart and a row of zeroes, which
+   looks like a dashboard that failed rather than one with nothing to report. These two helpers
+   let the idle state lead with what the tool actually knows about that person's own history. */
+function resentShare(){
+  const tb=(S.data&&S.data.tokenBreakdown)||null;
+  if(!tb) return null;
+  const cr=+tb.cache_read||0, denom=cr+(+tb.input||0)+(+tb.cache_write||0)+(+tb.output||0);
+  if(denom<=0) return null;
+  return Math.round(1000*cr/denom)/10;
+}
+function lastActiveDay(){
+  const days=((S.data&&S.data.days)||[]).filter(d=>(+d.total||0)>0);
+  return days.length ? days[days.length-1].date : null;
+}
+function firstActiveDay(){
+  const days=((S.data&&S.data.days)||[]).filter(d=>(+d.total||0)>0);
+  return days.length ? days[0].date : null;
+}
+function daysSince(iso){
+  if(!iso) return null;
+  const then=new Date(iso+"T00:00:00"), now=new Date();
+  return Math.round((new Date(now.getFullYear(),now.getMonth(),now.getDate())-then)/86400000);
+}
+
 /* Rolling-window figures, from the hourly buckets of /api/series?range=5d.
    win  = tokens in the last WINDOW_HOURS hours
    peak = the heaviest WINDOW_HOURS stretch we have measured in those five days */
@@ -705,9 +731,18 @@ function chartSeries(){
             empty: v.length<2 ? "Collecting. One reading every eight seconds. The 24-hour view is already full." : null};
   }
   const s=S.series["1d"], b=(s&&s.buckets)||[];
-  return {vals:b.map(x=>Object.keys(x.tools||{}).reduce((a,k)=>a+(+x.tools[k]||0),0)/60),
-          left:"24 h ago", stepMs:3600000, tsFirst:b.length?+b[0].ts:0,
-          empty: b.length<2 ? "No hourly readings yet." : null};
+  const vals=b.map(x=>Object.keys(x.tools||{}).reduce((a,k)=>a+(+x.tools[k]||0),0)/60);
+  /* A flat line pinned to zero is worse than no chart: it reads as a broken widget rather than
+     as an idle day. When every bucket is zero, say so and point at the last day that was not. */
+  const allZero = vals.length>=2 && vals.every(v=>!v);
+  const la = (typeof lastActiveDay==="function") ? lastActiveDay() : null;
+  const gap = (typeof daysSince==="function") ? daysSince(la) : null;
+  return {vals, left:"24 h ago", stepMs:3600000, tsFirst:b.length?+b[0].ts:0,
+          empty: b.length<2 ? "No hourly readings yet."
+               : (allZero ? ("Nothing ran in the last 24 hours."
+                   + (la ? " Your last logged activity was " + shortDate(la)
+                          + (gap>1 ? ", " + gap + " days ago." : ".") : "")
+                   + " Where it went still has your whole history.") : null)};
 }
 
 /* ===========================================================================
@@ -988,7 +1023,7 @@ function heroHTML(){
       ${(S.data.error)?`<div class="errbar" style="margin-top:var(--s4)"><b>The last scan reported a problem.</b> ${esc(String(S.data.error).split("\n")[0])}<br><span class="muted">Try Rescan under Settings. Your logs are only ever read, never written.</span></div>`:""}`;
   }
 
-  let verdict, why;
+  let verdict, why, idleWhy=null;
   const capLine = ci.source==="cap"
     ? `your cap ${fmt(ci.cap)}`
     : (ci.ready ? `ceiling about ${fmt(ci.cap)}` : "no ceiling yet");
@@ -1002,7 +1037,19 @@ function heroHTML(){
   } else {
     const left=Math.max(0, ci.cap-ci.win);
     if(left<=0){ verdict = ci.source==="cap" ? "You are past the cap you entered." : "You are at your heaviest five hours so far."; }
-    else if(burn<=0){ verdict=`${fmt(left)} tokens of headroom, and nothing burning.`; }
+    else if(burn<=0){
+      /* Idle. Lead with the finding from this person's own logs, not with a row of zeroes. */
+      const pct=resentShare(), la=lastActiveDay(), gap=daysSince(la);
+      verdict = (pct!=null)
+        ? `${pct}% of every token you have sent was history, re-sent.`
+        : "Nothing running right now.";
+      const bits=[];
+      if((+d.grand||0)>0) bits.push(`Across ${fmt(d.grand)} tokens${firstActiveDay()?" since "+shortDate(firstActiveDay()):""}.`);
+      if(pct!=null) bits.push("You typed it once and paid for it again on every message after.");
+      if(la) bits.push(gap===0 ? "Last active today." : (gap===1 ? "Last active yesterday." : `Nothing logged for ${gap} days, so today reads zero.`));
+      bits.push(`${fmt(left)} of headroom whenever you start again.`);
+      idleWhy=bits.join(" ");
+    }
     else {
       const mins=left/burn;
       verdict = mins<40 ? `About ${dur(mins)} left at this pace.` : `You have about ${dur(mins)} of headroom.`;
@@ -1014,7 +1061,9 @@ function heroHTML(){
       const t=running.slice().sort((a,b)=>(+b.burnMin||0)-(+a.burnMin||0))[0];
       lead=`One session, “${clip(t.title,58)}”, is burning ${Math.round((+t.burnMin||0)/tot*100)}% of it. `;
     }
-    why=lead+basis;
+    // The idle branch writes its own explanation from this person's own history; the
+    // ceiling basis line is the fallback for every other state.
+    why=lead+(idleWhy||basis);
   }
 
   const pct=ci.ready&&ci.cap>0 ? Math.min(100, ci.win/ci.cap*100) : 0;
