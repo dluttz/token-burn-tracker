@@ -2044,13 +2044,17 @@ function renderChrome(){
      whether the server went away or the page itself wedged, the old chip just sat there saying
      "Rescanning" forever over numbers that were minutes stale. Anything past two minutes without
      a successful read now says so and tells you what to do about it. */
+  /* The threshold has to clear the slowest poll that stamps lastOkAt, or the chip cries wolf
+     just before every scheduled refresh. /api/live stamps it every 8 seconds, so 90 seconds of
+     silence means this tab genuinely stopped being answered. */
   const age=S.lastOkAt ? (Date.now()-S.lastOkAt)/1000 : null;
-  const stale = age!=null && age>120;
+  const stale = age!=null && age>90;
   if(rc){
     rc.hidden = !(loading||stale);
     if(rt){
       if(stale) rt.textContent=`Not updating for ${Math.round(age/60)} min · reload the page`;
       else if(loading) rt.textContent=`Rescanning, ${nfmt((S.data&&S.data.parsed)||0)} of ${nfmt((S.data&&S.data.files)||0)} files`;
+      else rt.textContent="Rescanning";   // reset, or a cleared warning sticks around
     }
     rc.classList.toggle("stale", !!stale);
   }
@@ -2339,6 +2343,7 @@ async function pollLive(){
   try{
     const d=await apiJSON("/api/live");
     S.live=d;
+    S.lastOkAt=Date.now();   // this tab is being answered; the staleness guard keys off it
     const pm=Math.max(0,Math.round((d.burn&&d.burn.perMin)||0));
     if(!S.sampleStart) S.sampleStart=Date.now();
     S.lastSampleT=Date.now();
